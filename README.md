@@ -6,27 +6,27 @@ GitActionFlow is a take-home engineering assessment for an Abstrabit Software En
 
 ---
 
-## Current status (Phase 6)
+## Current status (Phase 8)
 
-This repository is in **Phase 6: Event Processing**.
+This repository is in **Phase 8: GitHub & Slack Action Execution**.
 
 **What exists now**
 
 - OAuth + one connected repository + minimal UI
-- `POST /webhooks/github` with HMAC signature verification
-- Issues + pull_request events persisted (delivery-ID idempotency)
-- Background worker claims `pending` events from PostgreSQL
-- Processing states: `pending` → `processing` → `processed` / retry / `failed`
-- Bounded retries with backoff; stale lease recovery after crashes
+- Signed webhook ingest + delivery-ID idempotency
+- Background worker with retries / failure handling
+- Configurable rules (event type, keyword, author, labels) via `/api/rules`
+- Rule evaluation produces action intents
+- Durable action records with idempotency keys
+- GitHub label / comment and Slack Incoming Webhook execution
 
 **What is not implemented yet**
 
-- Rule engine
-- GitHub labels/comments, Slack, AI
-- Event history dashboard UI
-- Automatic webhook registration on connect (configure webhook in GitHub manually for now)
+- AI
+- Event history / rules dashboard UI
+- Automatic webhook registration on connect
 
-Webhook ingest still returns quickly after durable persist. Processing happens asynchronously in the worker.
+Webhook ingest returns quickly after durable persist. The worker validates events, evaluates rules, persists actions, calls GitHub/Slack outside DB transactions, and marks the event `processed` only when all actions complete.
 ---
 
 ## Assignment purpose
@@ -52,11 +52,9 @@ Everything must use **free tiers only** (no credit card).
 | Connect one owned repository | **Phase 4 (done)** |
 | Webhook ingest (signature + idempotency + persist) | **Phase 5 (done)** |
 | Durable event processing (worker, retries, failures) | **Phase 6 (done)** |
-| Rule engine / GitHub+Slack actions | Phase 7+ |
-| GitHub write-back (label / comment) | Later |
-| Slack notifications | Later |
+| Configurable rule engine (action intents) | **Phase 7 (done)** |
+| GitHub / Slack action execution | **Phase 8 (done)** |
 | Authenticated dashboard (repo, rules, events, actions) | Later |
-| Configurable rules | Later |
 | Optional AI summary / label / priority (free provider) | Optional stretch |
 
 ---
@@ -99,15 +97,19 @@ GitHub Repository
                ▼
           Rule Engine
                │
-          ┌────┴─────┐
-          ▼          ▼
-       Optional      Actions
-          AI          │
-                      ├── GitHub API
-                      └── Slack
+               ▼
+         Action Intents
                │
                ▼
-        Action Results → PostgreSQL → React Dashboard
+        Action Executor
+               │
+          ┌────┴─────┐
+          ▼          ▼
+     GitHub API    Slack
+          │          │
+          └────┬─────┘
+               ▼
+        Action Results → PostgreSQL → React Dashboard (later)
 ```
 
 See [docs/architecture/HLA.md](docs/architecture/HLA.md) for the full description.
@@ -228,7 +230,7 @@ curl http://127.0.0.1:8080/ready
 
 ### Migrations
 
-With `AUTO_MIGRATE=true`, migrations apply on startup (`000001`–`000005`, including event processing columns).
+With `AUTO_MIGRATE=true`, migrations apply on startup (`000001`–`000006`, including `rules`).
 
 ### GitHub webhooks + background processing
 

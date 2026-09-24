@@ -1,6 +1,6 @@
 # API
 
-**Status:** Phase 6 — health, OAuth, repository connection, webhook ingestion, and background event processing. Rules/actions remain planned.
+**Status:** Phase 7 — health, OAuth, repository connection, webhook ingestion, event processing, and rule CRUD/evaluation. GitHub/Slack action **execution** remains planned.
 
 Base URL: Go server root (default `http://localhost:8080`).
 
@@ -112,7 +112,46 @@ Public endpoint. Authenticated by **HMAC signature**, not session cookies.
 | Invalid JSON / missing repo id | 400 | structured error |
 | DB failure | **500** | so GitHub can retry |
 
-New rows are stored with status **`pending`**. A background worker then claims them → `processed` (validation only) or retries/`failed`. HTTP webhook behavior is unchanged. No GitHub/Slack actions run yet.
+New rows are stored with status **`pending`**. A background worker claims them, evaluates rules (action intents only), then marks `processed` or retries/`failed`. No GitHub/Slack side effects yet.
+
+---
+
+### Rules (Phase 7)
+
+All routes require a session cookie. Repository is derived from the authenticated user's connected repo (never from the client).
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/rules` | List rules for connected repository |
+| POST | `/api/rules` | Create rule |
+| GET | `/api/rules/:id` | Get one rule |
+| PUT | `/api/rules/:id` | Update rule |
+| DELETE | `/api/rules/:id` | Delete rule |
+
+**Create/update body (example)**
+
+```json
+{
+  "name": "Bug Issues",
+  "enabled": true,
+  "event_type": "issues",
+  "keyword": "bug",
+  "author": "",
+  "required_labels": [],
+  "action_type": "github_label",
+  "action_config": { "label": "automation" }
+}
+```
+
+Conditions within a rule are **AND**. Empty keyword/author are treated as unspecified.  
+`action_type`: `github_label` | `github_comment` | `slack_notification`.
+
+| Case | HTTP |
+| --- | --- |
+| Success list/create/update/get | 200 / 201 |
+| Invalid input | 400 `INVALID_RULE` |
+| Unauthenticated | 401 |
+| No connected repository / rule not found | 404 |
 
 ---
 
@@ -131,4 +170,4 @@ New rows are stored with status **`pending`**. A background worker then claims t
 
 ## Planned (not implemented)
 
-Rules, GitHub/Slack actions, dashboard aggregations.
+GitHub/Slack action execution, dashboard aggregations.

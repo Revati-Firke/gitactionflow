@@ -136,8 +136,36 @@ Do not redesign the architecture without an ADR and explicit human agreement.
 - Bound retries (`EVENT_MAX_RETRIES`); persist `last_error` / `failed_at`
 - Recover stale `processing` via `locked_at` lease (`EVENT_PROCESSING_LEASE`)
 - Worker starts/stops with the backend (context cancel on shutdown)
-- Do not implement rules, GitHub write-back, or Slack until those phases
+- Do not implement dashboard or AI until those phases
 - Never log secrets or full webhook payloads
+
+---
+
+## Rule engine rules (Phase 7+)
+
+- Conditions within a rule are **AND**; unspecified conditions do not restrict
+- Supported conditions: event_type, keyword (title/body, case-insensitive), author (login, case-insensitive), required_labels (all must be present)
+- Disabled rules never match; multiple enabled rules may match one event (deterministic order: created_at, id)
+- Rules are scoped to the authenticated user's **connected** repository — never trust client `repository_id`
+- Rule evaluation produces **action intents** — execution is a separate component (`internal/actions`)
+- Valid action types: `github_label`, `github_comment`, `slack_notification`
+
+---
+
+## Action execution rules (Phase 8+)
+
+- Persist an `actions` row **before** any GitHub or Slack HTTP call
+- Idempotency key `event_id:rule_id:action_type` with a UNIQUE DB constraint (source of truth)
+- Never perform external HTTP inside an open database transaction
+- Classify errors: retry 429/5xx/network; do not endlessly retry 401/403/404/422/config errors
+- Reuse `events.RetryBackoff` for action retries; bound with `ACTION_MAX_RETRIES`
+- Slack webhook URL only from `SLACK_WEBHOOK_URL` env — never from rule config, client, logs, or API responses
+- GitHub writes use the connected user's decrypted server-side token via `internal/githubapi`
+- Operate only on the connected repository (stable GitHub repo id); issues and PRs share issue-number APIs
+- Do not mark the parent event `processed` while required actions are pending or failed
+- Exactly-once external delivery is not guaranteed; design minimizes duplicates (see ADR-008)
+- Keep integrations behind small interfaces for tests; no real GitHub/Slack in unit tests
+- Do not implement dashboard or AI until those phases
 
 ---
 

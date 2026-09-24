@@ -1,6 +1,6 @@
 # Database
 
-**Status:** Phase 6 — foundation, auth, repositories, webhook ingest, and durable event processing.
+**Status:** Phase 8 — includes configurable `rules` and durable `actions`.
 
 PostgreSQL via **pgx**. Migrations via **golang-migrate** (`backend/migrations/`).
 
@@ -14,60 +14,60 @@ users
   │
   └── repositories          (at most one row per user)
           │ 1
-          │
-          └── webhook_events   (many deliveries; unique delivery_id)
+          ├── webhook_events   (unique delivery_id)
+          │         │
+          │         └── actions   (unique idempotency_key)
+          └── rules            (many per repository)
 ```
 
 ---
 
-## Implemented tables
+## `actions`
 
-### `users` / `sessions` / `oauth_states`
-
-Phase 3. GitHub access tokens encrypted on `users`.
-
-### `repositories`
-
-Phase 4. `UNIQUE (user_id)` — one connected repo per user.
-
-### `webhook_events`
+Durable side-effect records created **before** GitHub/Slack calls.
 
 | Column | Notes |
 | --- | --- |
 | `id` | UUID PK |
-| `repository_id` | FK → repositories |
-| `delivery_id` | GitHub `X-GitHub-Delivery`, **UNIQUE** (ingest idempotency) |
-| `event_type` | e.g. `issues`, `pull_request` |
-| `action` | e.g. `opened` |
-| `payload` | JSONB raw body |
-| `status` | `pending` \| `processing` \| `processed` \| `failed` |
-| `retry_count` | Failures so far (Phase 6) |
-| `max_retries` | Bound from `EVENT_MAX_RETRIES` at insert |
-| `next_retry_at` | When a `pending` retry becomes eligible |
-| `last_error` | Last processing error message |
-| `locked_at` | Lease timestamp while `processing` |
-| `received_at` | Ingest time |
-| `processed_at` | Set when `processed` |
-| `failed_at` | Set when `failed` |
+| `event_id` | FK → webhook_events (CASCADE) |
+| `rule_id` | FK → rules (SET NULL on delete) |
+| `action_type` | `github_label` \| `github_comment` \| `slack_notification` |
+| `action_config` | JSONB from the rule (no secrets) |
+| `idempotency_key` | UNIQUE; typically `event_id:rule_id:action_type` |
+| `status` | `pending` → `processing` → `completed` \| `failed` |
+| `attempt_count` / `max_attempts` | Bounded retries |
+| `next_retry_at` | Backoff schedule |
+| `last_error` | Sanitized error text |
+| `started_at` / `completed_at` / `failed_at` | Lifecycle timestamps |
+| `created_at` / `updated_at` | Timestamps |
 
-#### Status meanings
+Lifecycle: create pending → mark processing → external call → completed, or retry/failed. Rows are never deleted on failure.
 
-| Status | Meaning |
+---
+
+## `rules`
+
+| Column | Notes |
 | --- | --- |
-| `pending` | Accepted; waiting for worker (or scheduled retry) |
-| `processing` | Claimed by a worker under a lease |
-| `processed` | Pipeline validation completed (no rules/actions yet) |
-| `failed` | Retries exhausted or permanent validation error |
+| `id` | UUID PK |
+| `repository_id` | FK → repositories (CASCADE) |
+| `name` | Display name |
+| `enabled` | Disabled rules never match |
+| `event_type` | `issues` \| `pull_request` |
+| `keyword` | Optional; substring in title/body (case-insensitive) |
+| `author` | Optional; GitHub login (case-insensitive) |
+| `required_labels` | `TEXT[]`; all must be present on the event |
+| `action_type` | `github_label` \| `github_comment` \| `slack_notification` |
+| `action_config` | JSONB (e.g. `{"label":"automation"}`) |
+| `created_at` / `updated_at` | Timestamps |
 
-#### Lifecycle
+Evaluation loads `enabled = true` for the event's repository, ordered by `created_at ASC, id ASC`.
 
-```text
-pending → processing → processed
-                  ↘ pending (retry) → …
-                  ↘ failed
-```
+---
 
-Stale `processing` (`locked_at` older than lease) can be reclaimed; `retry_count` increments.
+## `webhook_events`
+
+Ingest + processing fields from Phases 5–6 (`pending` / `processing` / `processed` / `failed`, retries, lease). An event is marked `processed` only after all related actions complete successfully.
 
 ---
 
@@ -80,9 +80,5 @@ Stale `processing` (`locked_at` older than lease) can be reclaimed; `retry_count
 | 000003 | repositories |
 | 000004 | webhook_events |
 | 000005 | event_processing |
-
----
-
-## Future (not implemented)
-
-`rules`, `actions` (side-effect results)
+| 000006 | rules |
+| 000007 | actions |

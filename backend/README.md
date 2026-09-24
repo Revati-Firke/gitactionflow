@@ -2,7 +2,7 @@
 
 Go HTTP API for GitActionFlow.
 
-**Phase 6 status:** Foundation + OAuth + one-repo connection + webhook ingestion + durable event worker.
+**Phase 8 status:** Foundation + OAuth + one-repo connection + webhook ingestion + event worker + configurable rules + GitHub/Slack action execution.
 
 ## Requirements
 
@@ -11,6 +11,7 @@ Go HTTP API for GitActionFlow.
 - GitHub OAuth App (`read:user repo`)
 - `GITHUB_WEBHOOK_SECRET` (≥ 16 chars)
 - Event worker env (defaults OK): `EVENT_WORKER_ENABLED`, `EVENT_WORKER_POLL_INTERVAL`, `EVENT_MAX_RETRIES`, `EVENT_PROCESSING_LEASE`
+- Actions: `ACTION_MAX_RETRIES` (default 3), optional `SLACK_WEBHOOK_URL` (server-side only)
 
 ## Quick start
 
@@ -37,6 +38,7 @@ go run ./cmd/server
 | GET | `/api/repository` | session |
 | POST | `/api/repository` | session |
 | DELETE | `/api/repository` | session |
+| GET/POST/PUT/DELETE | `/api/rules` | session |
 | POST | `/webhooks/github` | HMAC signature |
 
 ## Tests
@@ -49,4 +51,4 @@ go vet ./...
 
 ## Not implemented yet
 
-Event processor, rules, Slack, AI, event dashboard.
+Dashboard UI, AI, automatic webhook registration on connect.

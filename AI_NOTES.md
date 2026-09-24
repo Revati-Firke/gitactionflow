@@ -4,28 +4,33 @@ Honest record of how AI tools were used on GitActionFlow.
 
 ## AI Tools Used
 
-- Cursor agent (Composer) for Phase 6 implementation assistance
+- Cursor agent (Composer) for Phase 7 rule engine and Phase 8 action execution
 
 ## How AI Was Used
 
-- Scaffolded migration `000005`, store claim/retry APIs, `internal/events` worker + processor, config knobs, tests, and docs updates aligned to the Phase 6 prompt.
+- Phase 7: `rules` migration/store, matching engine, CRUD APIs, processor integration (intents), tests, ADR-007.
+- Phase 8: `actions` migration/store, GitHub write methods, Slack Incoming Webhook client, action executor (persist → execute → results), processor/worker wiring, unit tests with mocks, ADR-008 and docs.
 
 ## Engineering Decisions Made by Me
 
-- ADR number **006** (ADR-005 already used for sessions)
-- Permanent validation errors fail immediately (no useless retries); transient errors use backoff
-- Keep SQL claim logic in `store`; `events` package owns processor + worker
-- Successful Phase 6 processing = validated pipeline only (no rules/actions)
+- ADR **007** for rule/intent separation; ADR **008** for action idempotency and failure handling
+- Idempotency key format: `event_id:rule_id:action_type`
+- Action retries reuse `events.RetryBackoff`; `ACTION_MAX_RETRIES` defaults to 3
+- Parent event incomplete while actions pending; permanent action failure fails the event
+- Empty keyword/author after trim → unspecified (NULL)
+- Slack URL only from env; rule config holds message text only
 
 ## Incorrect AI Suggestion / Hardest AI Mistake
 
-- Early claim tests failed because leftover `pending` rows from live Phase 5 testing were claimed instead of the newly inserted row; concurrent claim also saw multiple pending rows.
+- Prompt referenced “ADR-006” for rules; repository already had ADR-006 for event processing — used ADR-007 instead.
+- Mid Phase 8, putting `actions.ErrFailed` in `events.IsPermanent` would create an import cycle (`actions` already imports `events`) — errors live in `events` (`ErrActionsFailed` / `ErrActionsIncomplete`).
 
 ## How I Corrected It
 
-- Integration tests clear claimable rows before asserting; claim SQL remains oldest-first for production fairness.
+- Documented ADR-007/008 and linked from the decisions index.
+- Defined action outcome errors in the `events` package so the worker can classify without cycles.
 
 ## What I Would Improve
 
-- Optional metrics/admin API for failed events (later dashboard phase)
-- Action-level idempotency when GitHub/Slack side effects land
+- Optional dashboard UI for rules/events/actions (Phase 9+)
+- Narrower crash-window mitigation for comment/Slack duplicates (e.g. outbound request ledger) if assignment scope allowed

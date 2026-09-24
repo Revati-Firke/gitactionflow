@@ -29,6 +29,7 @@ func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("EVENT_WORKER_POLL_INTERVAL", "")
 	t.Setenv("EVENT_MAX_RETRIES", "")
 	t.Setenv("EVENT_PROCESSING_LEASE", "")
+	t.Setenv("ACTION_MAX_RETRIES", "")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -57,6 +58,9 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.EventProcessingLease != time.Minute {
 		t.Fatalf("lease = %v", cfg.EventProcessingLease)
+	}
+	if cfg.ActionMaxRetries != 3 {
+		t.Fatalf("action max retries = %d", cfg.ActionMaxRetries)
 	}
 }
 

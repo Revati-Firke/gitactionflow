@@ -16,6 +16,8 @@ ADRs capture **why** we chose an approach, not only what we built.
 | ADR-004 | AI Provider Abstraction | Proposed (placeholder; optional stretch) |
 | [ADR-005](./ADR-005-sessions-and-token-encryption.md) | Server-side sessions and encrypted GitHub tokens | Accepted |
 | [ADR-006](./ADR-006-durable-event-processing.md) | PostgreSQL-backed event worker, retries, stale lease recovery | Accepted |
+| [ADR-007](./ADR-007-rule-action-intent-separation.md) | Rule matching produces action intents; no external side effects | Accepted |
+| [ADR-008](./ADR-008-action-idempotency-and-failure-handling.md) | Persist actions, idempotency keys, retries; HTTP outside DB txns | Accepted |
 
 ---
 

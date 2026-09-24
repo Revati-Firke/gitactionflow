@@ -78,3 +78,42 @@ func TestGetRepository_OK(t *testing.T) {
 		t.Fatalf("%+v %v", repo, err)
 	}
 }
+
+func TestAddIssueLabels_OK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/repos/o/r/issues/3/labels" {
+			t.Fatalf("%s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	c := githubapi.New(srv.Client()).WithBaseURL(srv.URL)
+	if err := c.AddIssueLabels(context.Background(), "tok", "o", "r", 3, []string{"automation"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateIssueComment_Retryable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	c := githubapi.New(srv.Client()).WithBaseURL(srv.URL)
+	err := c.CreateIssueComment(context.Background(), "tok", "o", "r", 1, "hi")
+	if !errors.Is(err, githubapi.ErrRetryable) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCreateIssueComment_Permanent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}))
+	defer srv.Close()
+	c := githubapi.New(srv.Client()).WithBaseURL(srv.URL)
+	err := c.CreateIssueComment(context.Background(), "tok", "o", "r", 1, "hi")
+	if !errors.Is(err, githubapi.ErrPermanent) {
+		t.Fatalf("got %v", err)
+	}
+}

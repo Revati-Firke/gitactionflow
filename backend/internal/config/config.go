@@ -34,6 +34,7 @@ type Config struct {
 	EventWorkerPollInterval time.Duration
 	EventMaxRetries         int
 	EventProcessingLease    time.Duration
+	ActionMaxRetries        int
 }
 
 // Load reads configuration from environment variables, applies defaults, and validates.
@@ -122,6 +123,12 @@ func Load() (Config, error) {
 	}
 	cfg.EventProcessingLease = lease
 
+	actionMaxRetries, err := parseInt(getEnv("ACTION_MAX_RETRIES", "3"))
+	if err != nil {
+		return Config{}, fmt.Errorf("ACTION_MAX_RETRIES: %w", err)
+	}
+	cfg.ActionMaxRetries = actionMaxRetries
+
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -171,6 +178,9 @@ func (c Config) Validate() error {
 	}
 	if c.EventProcessingLease <= 0 {
 		return fmt.Errorf("EVENT_PROCESSING_LEASE must be positive")
+	}
+	if c.ActionMaxRetries < 0 {
+		return fmt.Errorf("ACTION_MAX_RETRIES must be >= 0")
 	}
 	if c.SessionTTL <= 0 {
 		return fmt.Errorf("SESSION_TTL must be positive")

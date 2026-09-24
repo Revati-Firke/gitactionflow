@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Revati-Firke/gitactionflow/backend/internal/actions"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/auth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/config"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/database"
@@ -24,6 +25,8 @@ import (
 	"github.com/Revati-Firke/gitactionflow/backend/internal/http/router"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/logging"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/reposervice"
+	rulespkg "github.com/Revati-Firke/gitactionflow/backend/internal/rules"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/slack"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/store"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/webhook"
 )
@@ -49,6 +52,8 @@ func Run() error {
 		"cookie_samesite", redacted.CookieSameSite,
 		"event_worker_enabled", cfg.EventWorkerEnabled,
 		"event_max_retries", cfg.EventMaxRetries,
+		"action_max_retries", cfg.ActionMaxRetries,
+		"slack_configured", cfg.SlackWebhookURL != "",
 	)
 
 	ctx := context.Background()
@@ -73,7 +78,11 @@ func Run() error {
 	states := store.NewOAuthStates(pool)
 	repos := store.NewRepositories(pool)
 	webhookEvents := store.NewWebhookEvents(pool)
+	ruleStore := store.NewRules(pool)
+	actionStore := store.NewActions(pool)
 	tokenKey := auth.DeriveKey(cfg.SessionSecret)
+	ghAPI := githubapi.New(nil)
+	slackClient := slack.New(cfg.SlackWebhookURL, nil)
 
 	gh := githuboauth.New(githuboauth.Config{
 		ClientID:     cfg.GitHubClientID,
@@ -98,13 +107,22 @@ func Run() error {
 	}
 
 	repoService := &reposervice.Service{
-		GitHub:   githubapi.New(nil),
+		GitHub:   ghAPI,
 		Users:    users,
 		Repos:    repos,
 		TokenKey: tokenKey,
 	}
 	repoHandler := &handlers.RepositoryHandler{
 		Service: repoService,
+		Log:     log,
+	}
+
+	ruleService := &rulespkg.Service{
+		Rules: ruleStore,
+		Repos:  repos,
+	}
+	rulesHandler := &handlers.RulesHandler{
+		Service: ruleService,
 		Log:     log,
 	}
 
@@ -125,6 +143,7 @@ func Run() error {
 		FrontendURL: cfg.FrontendURL,
 		Auth:        authHandler,
 		Repos:       repoHandler,
+		Rules:       rulesHandler,
 		Webhooks:    webhookHandler,
 		AuthMW: middleware.AuthDeps{
 			Sessions: sessions,
@@ -144,9 +163,24 @@ func Run() error {
 	defer workerCancel()
 	var workerWG sync.WaitGroup
 	if cfg.EventWorkerEnabled {
+		executor := &actions.Executor{
+			Actions:     actionStore,
+			Repos:        repos,
+			Users:       users,
+			TokenKey:    tokenKey,
+			GitHub:      ghAPI,
+			Slack:       slackClient,
+			MaxAttempts: cfg.ActionMaxRetries,
+			Log:         log,
+		}
 		worker := &events.Worker{
-			Queue:        webhookEvents,
-			Pipeline:     &events.Processor{Repos: repos},
+			Queue: webhookEvents,
+			Pipeline: &events.Processor{
+				Repos:    repos,
+				Rules:   ruleStore,
+				Actions: executor,
+				Log:     log,
+			},
 			PollInterval: cfg.EventWorkerPollInterval,
 			Lease:        cfg.EventProcessingLease,
 			Log:          log,

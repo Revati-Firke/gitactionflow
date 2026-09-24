@@ -16,6 +16,7 @@ type Dependencies struct {
 	FrontendURL string
 	Auth        *handlers.AuthHandler
 	Repos       *handlers.RepositoryHandler
+	Rules       *handlers.RulesHandler
 	Webhooks    *handlers.GitHubWebhookHandler
 	AuthMW      middleware.AuthDeps
 	Log         *slog.Logger
@@ -54,6 +55,13 @@ func New(deps Dependencies) *gin.Engine {
 			api.GET("/repository", deps.Repos.GetConnected)
 			api.POST("/repository", deps.Repos.Connect)
 			api.DELETE("/repository", deps.Repos.Disconnect)
+		}
+		if deps.Rules != nil {
+			api.GET("/rules", deps.Rules.List)
+			api.POST("/rules", deps.Rules.Create)
+			api.GET("/rules/:id", deps.Rules.Get)
+			api.PUT("/rules/:id", deps.Rules.Update)
+			api.DELETE("/rules/:id", deps.Rules.Delete)
 		}
 	}
 

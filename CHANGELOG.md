@@ -8,6 +8,7 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions fol
 
 ### Added
 
+- Phase 7 configurable rule engine: conditions (event type, keyword, author, labels), CRUD APIs, action intents during processing (no external execution)
 - Phase 6 durable event processing: worker, retries, stale lease recovery, processed/failed states
 - Phase 5 webhook ingestion: signature verification, delivery idempotency, pending event persistence
 - Phase 4 repository management: list/connect/disconnect one GitHub repo, minimal React UI
@@ -22,4 +23,4 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions fol
 
 ### Not yet available
 
-- Rules, Slack, AI, full dashboard, production deploy, auto webhook registration
+- GitHub/Slack action execution, AI, full dashboard, production deploy, auto webhook registration

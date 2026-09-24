@@ -1,6 +1,7 @@
 package githubapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,8 @@ var (
 	ErrNotFound     = errors.New("github not found")
 	ErrForbidden    = errors.New("github forbidden")
 	ErrRateLimited  = errors.New("github rate limited")
+	ErrRetryable    = errors.New("github retryable error")
+	ErrPermanent    = errors.New("github permanent error")
 )
 
 // Repository is the subset of GitHub repo fields we use.
@@ -96,31 +99,68 @@ func (c *Client) GetRepository(ctx context.Context, accessToken string, githubRe
 }
 
 func (c *Client) getJSON(ctx context.Context, accessToken, url string, dest any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	return c.doJSON(ctx, http.MethodGet, accessToken, url, nil, dest, []int{http.StatusOK})
+}
+
+// AddIssueLabels adds labels to an issue or pull request (PR uses the issue number).
+func (c *Client) AddIssueLabels(ctx context.Context, accessToken, owner, repo string, issueNumber int, labels []string) error {
+	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/labels", c.baseURL, owner, repo, issueNumber)
+	body, err := json.Marshal(map[string]any{"labels": labels})
+	if err != nil {
+		return err
+	}
+	return c.doJSON(ctx, http.MethodPost, accessToken, url, body, nil, []int{http.StatusOK, http.StatusCreated})
+}
+
+// CreateIssueComment posts a comment on an issue or pull request.
+func (c *Client) CreateIssueComment(ctx context.Context, accessToken, owner, repo string, issueNumber int, comment string) error {
+	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", c.baseURL, owner, repo, issueNumber)
+	body, err := json.Marshal(map[string]string{"body": comment})
+	if err != nil {
+		return err
+	}
+	return c.doJSON(ctx, http.MethodPost, accessToken, url, body, nil, []int{http.StatusOK, http.StatusCreated})
+}
+
+func (c *Client) doJSON(ctx context.Context, method, accessToken, url string, body []byte, dest any, okCodes []int) error {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, reader)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("github request: %w", err)
+		return fmt.Errorf("%w: %v", ErrRetryable, err)
 	}
 	defer res.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	respBody, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
 	if err != nil {
-		return fmt.Errorf("read github body: %w", err)
+		return fmt.Errorf("%w: read body: %v", ErrRetryable, err)
+	}
+
+	for _, code := range okCodes {
+		if res.StatusCode == code {
+			if dest != nil {
+				if err := json.Unmarshal(respBody, dest); err != nil {
+					return fmt.Errorf("decode github json: %w", err)
+				}
+			}
+			return nil
+		}
 	}
 
 	switch res.StatusCode {
-	case http.StatusOK:
-		if err := json.Unmarshal(body, dest); err != nil {
-			return fmt.Errorf("decode github json: %w", err)
-		}
-		return nil
 	case http.StatusUnauthorized:
 		return ErrUnauthorized
 	case http.StatusForbidden:
@@ -130,9 +170,17 @@ func (c *Client) getJSON(ctx context.Context, accessToken, url string, dest any)
 		return ErrForbidden
 	case http.StatusNotFound:
 		return ErrNotFound
+	case http.StatusUnprocessableEntity, http.StatusConflict:
+		return fmt.Errorf("%w: github status %d", ErrPermanent, res.StatusCode)
 	case http.StatusTooManyRequests:
 		return ErrRateLimited
 	default:
+		if res.StatusCode >= 500 {
+			return fmt.Errorf("%w: github status %d", ErrRetryable, res.StatusCode)
+		}
+		if res.StatusCode >= 400 {
+			return fmt.Errorf("%w: github status %d", ErrPermanent, res.StatusCode)
+		}
 		return fmt.Errorf("github status %s", strconv.Itoa(res.StatusCode))
 	}
 }
