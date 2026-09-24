@@ -1,0 +1,61 @@
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Secrets / keys
+*.pem
+*.key
+!*.key.example
+credentials.json
+service-account*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Go
+backend/bin/
+backend/dist/
+*.exe
+*.test
+*.out
+coverage.out
+vendor/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Logs
+*.log
+logs/
+
+# Docker
+docker-data/
+
+# Test / temp
+tmp/
+temp/
+.cache/
+coverage/
+.nyc_output/
+
+# Misc
+*.bak
+*.tmp

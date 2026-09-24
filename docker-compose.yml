@@ -1,0 +1,28 @@
+# GitActionFlow — local development dependencies
+# Phase 1: PostgreSQL only. Application services are added in later phases.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gitactionflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gitactionflow
+      POSTGRES_PASSWORD: gitactionflow
+      POSTGRES_DB: gitactionflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - gitactionflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitactionflow -d gitactionflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  gitactionflow_pgdata:
