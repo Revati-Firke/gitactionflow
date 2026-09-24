@@ -3,6 +3,7 @@ package config_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Revati-Firke/gitactionflow/backend/internal/config"
 )
@@ -24,6 +25,10 @@ func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("APP_PORT", "")
 	t.Setenv("LOG_LEVEL", "")
 	t.Setenv("AUTO_MIGRATE", "")
+	t.Setenv("EVENT_WORKER_ENABLED", "")
+	t.Setenv("EVENT_WORKER_POLL_INTERVAL", "")
+	t.Setenv("EVENT_MAX_RETRIES", "")
+	t.Setenv("EVENT_PROCESSING_LEASE", "")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -40,6 +45,18 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.Addr() != ":8080" {
 		t.Fatalf("Addr() = %q, want :8080", cfg.Addr())
+	}
+	if !cfg.EventWorkerEnabled {
+		t.Fatal("EventWorkerEnabled should default true")
+	}
+	if cfg.EventWorkerPollInterval != 2*time.Second {
+		t.Fatalf("poll = %v", cfg.EventWorkerPollInterval)
+	}
+	if cfg.EventMaxRetries != 3 {
+		t.Fatalf("max retries = %d", cfg.EventMaxRetries)
+	}
+	if cfg.EventProcessingLease != time.Minute {
+		t.Fatalf("lease = %v", cfg.EventProcessingLease)
 	}
 }
 

@@ -38,7 +38,7 @@ type whEvents struct {
 	insert int
 }
 
-func (m *whEvents) InsertPending(_ context.Context, repositoryID uuid.UUID, deliveryID, eventType, action string, payload json.RawMessage) (store.WebhookEvent, error) {
+func (m *whEvents) InsertPendingWithMaxRetries(_ context.Context, repositoryID uuid.UUID, deliveryID, eventType, action string, payload json.RawMessage, maxRetries int) (store.WebhookEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.insert++
@@ -51,14 +51,14 @@ func (m *whEvents) InsertPending(_ context.Context, repositoryID uuid.UUID, deli
 	if _, ok := m.byID[deliveryID]; ok {
 		return store.WebhookEvent{}, store.ErrConflict
 	}
-	e := store.WebhookEvent{ID: uuid.New(), RepositoryID: repositoryID, DeliveryID: deliveryID, EventType: eventType, Action: action, Payload: payload, Status: store.WebhookStatusPending}
+	e := store.WebhookEvent{ID: uuid.New(), RepositoryID: repositoryID, DeliveryID: deliveryID, EventType: eventType, Action: action, Payload: payload, Status: store.WebhookStatusPending, MaxRetries: maxRetries}
 	m.byID[deliveryID] = e
 	return e, nil
 }
 
 type failEvents struct{}
 
-func (failEvents) InsertPending(context.Context, uuid.UUID, string, string, string, json.RawMessage) (store.WebhookEvent, error) {
+func (failEvents) InsertPendingWithMaxRetries(context.Context, uuid.UUID, string, string, string, json.RawMessage, int) (store.WebhookEvent, error) {
 	return store.WebhookEvent{}, errorsNew("db down")
 }
 

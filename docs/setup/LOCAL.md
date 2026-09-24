@@ -1,8 +1,8 @@
-# Local setup & test (through Phase 5)
+# Local setup & test (through Phase 6)
 
-Short guide: OAuth, connect one repo, ingest signed GitHub webhooks, ingest signed GitHub webhooks.
+Short guide: OAuth, connect one repo, ingest signed GitHub webhooks, background processing to `processed` / `failed`.
 
-**Not included yet:** event processing, rules, Slack, labels/comments, event dashboard UI.
+**Not included yet:** rule engine, Slack, labels/comments, event dashboard UI.
 
 ---
 
@@ -43,6 +43,10 @@ SESSION_SECRET=$(openssl rand -hex 32)          # >= 32 chars
 GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)   # >= 16 chars; same value on GitHub webhook
 FRONTEND_URL=http://localhost:5173
 WEBHOOK_MAX_BODY_BYTES=1048576                  # 1 MiB
+EVENT_WORKER_ENABLED=true
+EVENT_WORKER_POLL_INTERVAL=2s
+EVENT_MAX_RETRIES=3
+EVENT_PROCESSING_LEASE=1m
 ```
 
 Use **`localhost` only** (not `127.0.0.1`) for OAuth cookie matching. Never commit `.env`.
@@ -87,7 +91,7 @@ On the **connected** repository: **Settings → Webhooks → Add webhook**
 | Secret | same as `GITHUB_WEBHOOK_SECRET` |
 | Events | **Issues** and **Pull requests** |
 
-Ping → **200** `ignored` / `unsupported_event` (expected). Issue open → `accepted` and DB row `pending`.
+Ping → **200** `ignored` / `unsupported_event` (expected). Issue open → ingest `accepted`, then worker → `processed`.
 
 ### Local signed request
 
@@ -111,7 +115,7 @@ docker-compose exec -T postgres psql -U gitactionflow -d gitactionflow \
   -c "SELECT delivery_id, event_type, status, retry_count, last_error FROM webhook_events ORDER BY received_at DESC LIMIT 5;"
 ```
 
-Expect `status = pending` (processing is Phase 6).
+Expect `status = processed` for valid events.
 
 ---
 
@@ -133,6 +137,8 @@ cd backend && go test ./... && go vet ./...
 | Webhook **401** | Wrong secret or body altered before HMAC |
 | Webhook ignored / unknown_repository | Repo not connected, or `repository.id` mismatch |
 | Duplicate delivery | Same `X-GitHub-Delivery` → `already_received` |
+| Stuck `pending` | Check `EVENT_WORKER_ENABLED` and backend logs |
+| Stuck `processing` | Wait for `EVENT_PROCESSING_LEASE` or restart backend |
 
 ---
 
@@ -140,4 +146,4 @@ cd backend && go test ./... && go vet ./...
 
 | Done | Not yet |
 | --- | --- |
-| Secure ingest + persist `pending` | Rules, labels, comments, Slack, AI, dashboard logs |
+| Secure ingest + worker → processed / retry / failed | Rules, labels, comments, Slack, AI, dashboard logs |

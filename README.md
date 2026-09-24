@@ -6,26 +6,28 @@ GitActionFlow is a take-home engineering assessment for an Abstrabit Software En
 
 ---
 
-## Current status (Phase 5)
+## Current status (Phase 6)
 
-This repository is in **Phase 5: GitHub Webhook Ingestion**.
+This repository is in **Phase 6: Event Processing**.
 
 **What exists now**
 
 - OAuth + one connected repository + minimal UI
 - `POST /webhooks/github` with HMAC signature verification
-- Issues + pull_request events persisted as `pending`
-- Delivery-ID idempotency (no duplicate rows)
+- Issues + pull_request events persisted (delivery-ID idempotency)
+- Background worker claims `pending` events from PostgreSQL
+- Processing states: `pending` → `processing` → `processed` / retry / `failed`
+- Bounded retries with backoff; stale lease recovery after crashes
 
 **What is not implemented yet**
 
-- Event processing / rule engine
+- Rule engine
 - GitHub labels/comments, Slack, AI
 - Event history dashboard UI
 - Automatic webhook registration on connect (configure webhook in GitHub manually for now)
 
-Persisting a webhook does **not** run automation yet (Phase 6+).
-
+Webhook ingest still returns quickly after durable persist. Processing happens asynchronously in the worker.
+---
 
 ## Assignment purpose
 
@@ -48,14 +50,13 @@ Everything must use **free tiers only** (no credit card).
 | Backend foundation (config, DB, health/ready) | **Phase 2 (done)** |
 | GitHub OAuth sign-in + sessions | **Phase 3 (done)** |
 | Connect one owned repository | **Phase 4 (done)** |
-| Publicly reachable web app | Later (deploy) |
-| Webhook endpoint (issues + pull requests) | Phase 5+ |
+| Webhook ingest (signature + idempotency + persist) | **Phase 5 (done)** |
+| Durable event processing (worker, retries, failures) | **Phase 6 (done)** |
+| Rule engine / GitHub+Slack actions | Phase 7+ |
 | GitHub write-back (label / comment) | Later |
 | Slack notifications | Later |
 | Authenticated dashboard (repo, rules, events, actions) | Later |
 | Configurable rules | Later |
-| Webhook signature + delivery idempotency | Later |
-| Durable processing without silent event loss | Later |
 | Optional AI summary / label / priority (free provider) | Optional stretch |
 
 ---
@@ -216,7 +217,7 @@ curl -sS -b /tmp/gaf.jar -X DELETE http://127.0.0.1:8080/api/repository
 **One-repo rule:** disconnect the current repository before connecting another (`409` otherwise).  
 **Scopes:** OAuth uses `read:user repo`.
 
-Webhook registration / processing is **not** implemented yet.
+Webhook registration on connect is **not** implemented yet (configure the GitHub webhook manually).
 
 ### Health and readiness
 
@@ -227,8 +228,28 @@ curl http://127.0.0.1:8080/ready
 
 ### Migrations
 
-With `AUTO_MIGRATE=true`, migrations apply on startup (`000001` foundation, `000002` auth, `000003` repositories).
+With `AUTO_MIGRATE=true`, migrations apply on startup (`000001`–`000005`, including event processing columns).
 
+### GitHub webhooks + background processing
+
+1. Set `GITHUB_WEBHOOK_SECRET` in `.env` (restart backend).
+2. Optional worker knobs (defaults shown):
+
+```bash
+EVENT_WORKER_ENABLED=true
+EVENT_WORKER_POLL_INTERVAL=2s
+EVENT_MAX_RETRIES=3
+EVENT_PROCESSING_LEASE=1m
+```
+
+3. Expose `:8080` publicly (tunnel) or use the signed `curl` example in [docs/setup/LOCAL.md](docs/setup/LOCAL.md).
+4. On the connected repo: add webhook → `https://<host>/webhooks/github`, JSON, same secret, Issues + Pull requests.
+5. Deliveries are stored as **`pending`**, then the worker claims them → **`processed`** (validation only; no labels/Slack yet).
+6. Transient failures retry with backoff; exhausted events stay **`failed`** with `last_error`.
+
+Invalid signature → **401**. Duplicate `X-GitHub-Delivery` → **200** `already_received` (no second row). DB failure on ingest → **500** (GitHub retries).
+
+PostgreSQL is the durable source of truth for the queue — no Redis/Kafka.
 ### Frontend (minimal)
 
 ```bash
@@ -318,8 +339,9 @@ See [SECURITY.md](SECURITY.md).
 | **1** | Foundation, docs, conventions |
 | **2** | Backend scaffold, Postgres access, health, config |
 | **3** | Auth (GitHub OAuth + sessions) |
-| **4 (current)** | Repository connect (one repo) |
-| **5** | Webhook ingest, persistence, idempotency |
+| **4** | Repository connect (one repo) |
+| **5 (current)** | Webhook ingest, signature, idempotency |
+| **6** | Event processor + retries |
 | **6** | Rule engine + GitHub / Slack actions |
 | **7** | React dashboard |
 | **8** | Deploy + E2E hardening |

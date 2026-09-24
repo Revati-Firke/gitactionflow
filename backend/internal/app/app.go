@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/Revati-Firke/gitactionflow/backend/internal/auth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/config"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/database"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/events"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/githubapi"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/githuboauth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/http/handlers"
@@ -45,6 +47,8 @@ func Run() error {
 		"oauth_redirect", redacted.GitHubOAuthRedirectURL,
 		"cookie_secure", redacted.CookieSecure,
 		"cookie_samesite", redacted.CookieSameSite,
+		"event_worker_enabled", cfg.EventWorkerEnabled,
+		"event_max_retries", cfg.EventMaxRetries,
 	)
 
 	ctx := context.Background()
@@ -106,8 +110,9 @@ func Run() error {
 
 	webhookHandler := &handlers.GitHubWebhookHandler{
 		Service: &webhook.Service{
-			Repos:   repos,
-			Events:  webhookEvents,
+			Repos:       repos,
+			Events:      webhookEvents,
+			MaxRetries:  cfg.EventMaxRetries,
 		},
 		Secret:  cfg.GitHubWebhookSecret,
 		MaxBody: cfg.WebhookMaxBodyBytes,
@@ -135,6 +140,24 @@ func Run() error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	var workerWG sync.WaitGroup
+	if cfg.EventWorkerEnabled {
+		worker := &events.Worker{
+			Queue:        webhookEvents,
+			Pipeline:     &events.Processor{Repos: repos},
+			PollInterval: cfg.EventWorkerPollInterval,
+			Lease:        cfg.EventProcessingLease,
+			Log:          log,
+		}
+		workerWG.Add(1)
+		go func() {
+			defer workerWG.Done()
+			worker.Run(workerCtx)
+		}()
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("http server listening", "addr", cfg.Addr())
@@ -152,9 +175,14 @@ func Run() error {
 		log.Info("shutdown signal received", "signal", sig.String())
 	case err := <-errCh:
 		if err != nil {
+			workerCancel()
+			workerWG.Wait()
 			return fmt.Errorf("http server: %w", err)
 		}
 	}
+
+	workerCancel()
+	workerWG.Wait()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

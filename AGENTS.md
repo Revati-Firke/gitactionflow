@@ -128,6 +128,19 @@ Do not redesign the architecture without an ADR and explicit human agreement.
 
 ---
 
+## Event processing rules (Phase 6+)
+
+- PostgreSQL is the durable processing queue (no Redis/Kafka for this assignment)
+- Claim events with transactions + `FOR UPDATE SKIP LOCKED`
+- Lifecycle: `pending` → `processing` → `processed` | retry `pending` | `failed`
+- Bound retries (`EVENT_MAX_RETRIES`); persist `last_error` / `failed_at`
+- Recover stale `processing` via `locked_at` lease (`EVENT_PROCESSING_LEASE`)
+- Worker starts/stops with the backend (context cancel on shutdown)
+- Do not implement rules, GitHub write-back, or Slack until those phases
+- Never log secrets or full webhook payloads
+
+---
+
 ## Before modifying code
 
 1. Inspect the existing implementation and understand the architecture.

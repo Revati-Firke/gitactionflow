@@ -29,6 +29,11 @@ type Config struct {
 	CookieSameSite         string
 	WebhookMaxBodyBytes    int64
 	AIAPIKey               string
+
+	EventWorkerEnabled      bool
+	EventWorkerPollInterval time.Duration
+	EventMaxRetries         int
+	EventProcessingLease    time.Duration
 }
 
 // Load reads configuration from environment variables, applies defaults, and validates.
@@ -93,6 +98,30 @@ func Load() (Config, error) {
 	}
 	cfg.WebhookMaxBodyBytes = maxBody
 
+	workerEnabled, err := parseBool(getEnv("EVENT_WORKER_ENABLED", "true"))
+	if err != nil {
+		return Config{}, fmt.Errorf("EVENT_WORKER_ENABLED: %w", err)
+	}
+	cfg.EventWorkerEnabled = workerEnabled
+
+	pollInterval, err := parseDuration(getEnv("EVENT_WORKER_POLL_INTERVAL", "2s"))
+	if err != nil {
+		return Config{}, fmt.Errorf("EVENT_WORKER_POLL_INTERVAL: %w", err)
+	}
+	cfg.EventWorkerPollInterval = pollInterval
+
+	maxRetries, err := parseInt(getEnv("EVENT_MAX_RETRIES", "3"))
+	if err != nil {
+		return Config{}, fmt.Errorf("EVENT_MAX_RETRIES: %w", err)
+	}
+	cfg.EventMaxRetries = maxRetries
+
+	lease, err := parseDuration(getEnv("EVENT_PROCESSING_LEASE", "1m"))
+	if err != nil {
+		return Config{}, fmt.Errorf("EVENT_PROCESSING_LEASE: %w", err)
+	}
+	cfg.EventProcessingLease = lease
+
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -133,6 +162,15 @@ func (c Config) Validate() error {
 	}
 	if c.WebhookMaxBodyBytes < 1024 || c.WebhookMaxBodyBytes > 10<<20 {
 		return fmt.Errorf("WEBHOOK_MAX_BODY_BYTES must be between 1KiB and 10MiB")
+	}
+	if c.EventWorkerPollInterval <= 0 {
+		return fmt.Errorf("EVENT_WORKER_POLL_INTERVAL must be positive")
+	}
+	if c.EventMaxRetries < 0 {
+		return fmt.Errorf("EVENT_MAX_RETRIES must be >= 0")
+	}
+	if c.EventProcessingLease <= 0 {
+		return fmt.Errorf("EVENT_PROCESSING_LEASE must be positive")
 	}
 	if c.SessionTTL <= 0 {
 		return fmt.Errorf("SESSION_TTL must be positive")
@@ -201,6 +239,14 @@ func parseDuration(raw string) (time.Duration, error) {
 
 func parseInt64(raw string) (int64, error) {
 	v, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+func parseInt(raw string) (int, error) {
+	v, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil {
 		return 0, err
 	}

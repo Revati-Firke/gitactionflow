@@ -1,29 +1,31 @@
 # AI Notes
 
-Honest record of how AI tools were used on GitActionFlow. Fill in as development proceeds. Do not invent usage or mistakes that did not happen.
+Honest record of how AI tools were used on GitActionFlow.
 
 ## AI Tools Used
 
-Cursor agent (Composer) for Phase 5 webhook ingestion assistance.
+- Cursor agent (Composer) for Phase 6 implementation assistance
 
 ## How AI Was Used
 
-Implemented signature verification, webhook handler, delivery-id idempotency, and pending persistence.
+- Scaffolded migration `000005`, store claim/retry APIs, `internal/events` worker + processor, config knobs, tests, and docs updates aligned to the Phase 6 prompt.
 
 ## Engineering Decisions Made by Me
 
-- Ack only after durable persist
-- Ignore unknown repos with 200 to avoid GitHub retry storms
-- No processing in the webhook request path
+- ADR number **006** (ADR-005 already used for sessions)
+- Permanent validation errors fail immediately (no useless retries); transient errors use backoff
+- Keep SQL claim logic in `store`; `events` package owns processor + worker
+- Successful Phase 6 processing = validated pipeline only (no rules/actions)
 
 ## Incorrect AI Suggestion / Hardest AI Mistake
 
-_To be documented honestly during development._
+- Early claim tests failed because leftover `pending` rows from live Phase 5 testing were claimed instead of the newly inserted row; concurrent claim also saw multiple pending rows.
 
 ## How I Corrected It
 
-_To be completed during development._
+- Integration tests clear claimable rows before asserting; claim SQL remains oldest-first for production fairness.
 
 ## What I Would Improve
 
-_To be completed before submission._
+- Optional metrics/admin API for failed events (later dashboard phase)
+- Action-level idempotency when GitHub/Slack side effects land

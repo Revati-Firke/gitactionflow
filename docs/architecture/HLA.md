@@ -1,6 +1,6 @@
 # High-Level Architecture (HLA)
 
-**Status:** Phase 4 — auth + one-repo connection implemented; webhooks/rules still planned.
+**Status:** Phase 6 — auth, one-repo connection, webhook ingestion, and durable event processing (no rules/actions yet).
 
 **Project:** GitActionFlow — event-driven automation for Git repositories.
 
@@ -14,59 +14,22 @@ GitActionFlow is a **modular monolith**:
 
 - A **React** dashboard for authenticated users
 - A **Go** HTTP backend for OAuth, repository connection, webhooks, processing, and dashboard APIs
-- **PostgreSQL** as the durable source of truth
+- **PostgreSQL** as the durable source of truth (including the event processing queue)
 - External systems: **GitHub** (OAuth, webhooks, REST API) and **Slack** (Incoming Webhook)
 - Optional later: free-tier **AI** provider for summaries / suggestions (never required for core path)
 
 ```text
-                         USER
-                           │
-                           ▼
-                  React Web Dashboard
-                           │
-                           ▼
-                      Go Backend
-                           │
-                ┌──────────┼───────────┐
-                ▼          ▼           ▼
-              Auth     Repository    Dashboard
-                │       Management     APIs
-                │
-                ▼
-           GitHub OAuth
-
-GitHub Repository
-       │
-       │ signed webhook
-       ▼
- Webhook Handler
-       │
-       ├── verify signature
-       ├── validate event
-       ├── check delivery ID
-       └── persist event
-               │
-               ▼
-        Event Processor
-               │
-               ▼
-          Rule Engine
-               │
-          ┌────┴─────┐
-          ▼          ▼
-       Optional      Actions
-          AI          │
-                      ├── GitHub API
-                      └── Slack
-               │
-               ▼
-        Action Results
-               │
-               ▼
-           PostgreSQL
-               │
-               ▼
-          React Dashboard
+GitHub
+  ↓
+Webhook Handler
+  ↓
+PostgreSQL (pending)
+  ↓
+Event Worker
+  ↓
+Event Processor
+  ↓
+Processed / Retry / Failed
 ```
 
 ---
@@ -77,165 +40,58 @@ GitHub Repository
 | --- | --- |
 | React Web Dashboard | Login-gated UI: connected repo, rules, event/action history |
 | Auth module | GitHub OAuth start/callback, session establishment, CSRF `state` (**implemented**) |
-| Repository management | Connect one owned/admin repo; persist connection (**implemented Phase 4**; webhook registration later) |
+| Repository management | Connect one owned/admin repo (**Phase 4**; webhook registration later) |
 | Dashboard APIs | Read models for events, actions, rules, connection status |
-| Webhook handler | Signature verify, validate, dedupe, durable persist |
-| Event processor | Load pending events, apply rules, enqueue/execute actions |
-| Rule engine | Match configured rules (e.g. title contains keyword) |
-| Actions | GitHub label/comment; Slack notify; persist outcomes |
-| Optional AI | Summarize / suggest label or priority; never block core path |
-| PostgreSQL | Users, sessions, repos, rules, events, actions, failures |
+| Webhook handler | Signature verify, validate, dedupe, durable persist (**Phase 5**) |
+| Event worker | Poll/claim pending and stale processing rows; retries (**Phase 6**) |
+| Event processor | Validate persisted events; future rules/actions plug in here |
+| Rule engine | Match configured rules — **not yet** |
+| Actions | GitHub label/comment; Slack notify — **not yet** |
+| Optional AI | Stretch only; never block core path |
+| PostgreSQL | Users, sessions, repos, events, failures |
 
 ---
 
-## External systems
-
-| System | Role |
-| --- | --- |
-| GitHub OAuth | User identity and authorization to act on their behalf |
-| GitHub Webhooks | Push events (issues, pull_request, …) to our public endpoint |
-| GitHub REST API | Labels, comments, repo metadata |
-| Slack Incoming Webhook | Channel notifications |
-| Optional LLM API | Stretch triage only |
-
----
-
-## Authentication flow (Phase 3 — implemented)
+## Webhook ingestion (Phase 5)
 
 ```text
-Browser
-   ↓
-GET /auth/github
-   ↓
-Generate OAuth state (random) → store hash in oauth_states (TTL, single-use)
-   ↓
-Redirect → GitHub authorize (scopes: read:user repo)
-   ↓
-GitHub callback → GET /auth/github/callback?code&state
-   ↓
-Validate + consume state
-   ↓
-Exchange code → access token (server-side only)
-   ↓
-GET GitHub /user → upsert users (token AES-GCM encrypted)
-   ↓
-Create sessions row (token hash) + Set-Cookie gaf_session (HttpOnly)
-   ↓
-Redirect → FRONTEND_URL
+GitHub → POST /webhooks/github → verify HMAC → validate → UNIQUE delivery_id → pending → 2xx
 ```
 
-Protected APIs (e.g. `GET /api/me`) read the cookie, validate the session hash and expiry, and load the user. Logout deletes the session and clears the cookie.
-
-Details: [ADR-005](../decisions/ADR-005-sessions-and-token-encryption.md).
-
----
-
-## Repository management flow (Phase 4 — implemented)
+## Event processing (Phase 6)
 
 ```text
-Authenticated User
-       ↓
-GET /api/github/repositories  → GitHub API (user token, server-side)
-       ↓
-POST /api/repository { github_repository_id }
-       ↓
-Fetch repo from GitHub → require permissions.admin
-       ↓
-Enforce one-repo-per-user → PostgreSQL repositories
-       ↓
-GET /api/repository / DELETE /api/repository
+pending → processing → processed
+                 ↘ pending (+ next_retry_at)
+                 ↘ failed
 ```
 
-Webhook registration is intentionally deferred to Phase 5+.
+- Claim with `FOR UPDATE SKIP LOCKED`
+- Stale `locked_at` reclaimed after `EVENT_PROCESSING_LEASE`
+- Backoff: 1m / 5m / 15m; bound by `EVENT_MAX_RETRIES`
+- No Redis/Kafka — see [ADR-006](../decisions/ADR-006-durable-event-processing.md)
+
+Successful processing in Phase 6 means **validated pipeline**, not GitHub/Slack actions.
 
 ---
 
-## Data flow (happy path)
+## Authentication flow (Phase 3)
 
-1. User authenticates via GitHub OAuth.
-2. User connects one owned repository; webhook is registered (or configured) against the public backend URL.
-3. Activity occurs on the repo → GitHub POSTs a signed webhook.
-4. Backend verifies signature, validates payload, checks delivery ID, **persists** the event.
-5. Processor evaluates rules and performs actions.
-6. Action results are stored.
-7. Dashboard reads history from PostgreSQL.
+See [ADR-005](../decisions/ADR-005-sessions-and-token-encryption.md).
 
 ---
 
-## Webhook flow (reliability-focused)
+## Reliability
 
-```text
-GitHub webhook
-      ↓
-Validate (signature + payload)
-      ↓
-Deduplicate (delivery ID)
-      ↓
-Persist event
-      ↓
-Acknowledge (HTTP success after durable write)
-      ↓
-Process event
-      ↓
-Execute actions
-      ↓
-Persist action result / failure
-```
+- Delivery-ID ingest idempotency
+- Persist before acknowledge
+- Visible retries / failures in PostgreSQL
+- Graceful worker shutdown via context cancel
 
-Principles:
+## Explicit non-goals
 
-- Database is the durable source of truth.
-- Do not rely on an in-memory queue for critical event state.
-- Prefer acknowledging after durable persistence rather than waiting for all downstream side effects.
-- Failures must be visible and retryable — never silently dropped.
-
----
-
-## Dashboard flow
-
-1. Browser loads React app (public static host).
-2. Unauthenticated users are sent through GitHub OAuth.
-3. Authenticated session cookie / token is used for dashboard API calls to the Go backend.
-4. UI shows connected repository, rules CRUD (planned), and event/action logs with statuses.
-
----
-
-## Security boundaries
-
-| Boundary | Rule |
-| --- | --- |
-| Public webhook endpoint | Signature required; no session cookie trust |
-| Dashboard APIs | Authenticated session required |
-| Secrets | Server-only env; never in React bundle |
-| OAuth | `state` validated; tokens stored server-side |
-| Idempotency | Delivery ID uniqueness prevents duplicate side effects |
-
-Details: root `SECURITY.md`.
-
----
-
-## Reliability considerations
-
-- Idempotent webhook handling via delivery IDs
-- Persist-before-side-effects mindset
-- Explicit action statuses (`pending`, `succeeded`, `failed`, etc. — exact enum later)
-- Visible failure history for retries
-- Structured logging without secrets (later phases)
-
----
-
-## Explicit non-goals (architecture)
-
-- Microservices split
-- Kafka / Redis as primary event durability
-- Multi-cloud complexity
-- Non-GitHub VCS providers
-
----
+- Microservices, Kafka/Redis as primary durability, non-GitHub VCS
 
 ## Related documents
 
-- [API plan](../api/README.md)
-- [Database direction](../database/README.md)
-- [Deployment direction](../deployment/README.md)
-- [ADR index](../decisions/README.md)
+- [API](../api/README.md) · [Database](../database/README.md) · [Deployment](../deployment/README.md) · [ADRs](../decisions/README.md)

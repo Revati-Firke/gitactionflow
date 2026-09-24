@@ -1,6 +1,6 @@
 # API
 
-**Status:** Phase 4 — health, OAuth auth, and repository connection implemented. Webhooks/rules/actions remain planned.
+**Status:** Phase 6 — health, OAuth, repository connection, webhook ingestion, and background event processing. Rules/actions remain planned.
 
 Base URL: Go server root (default `http://localhost:8080`).
 
@@ -79,9 +79,40 @@ Backend re-fetches the repo from GitHub and requires **admin** permission. Clien
 
 #### `DELETE /api/repository`
 
-Disconnects the local connection (idempotent). Does **not** delete GitHub webhooks (none registered yet).
+Disconnects the local connection (idempotent). Does **not** delete GitHub webhooks automatically.
 
-**200** `{ "status": "ok" }`
+### Webhooks (Phase 5)
+
+#### `POST /webhooks/github`
+
+Public endpoint. Authenticated by **HMAC signature**, not session cookies.
+
+**Required headers**
+
+| Header | Purpose |
+| --- | --- |
+| `X-Hub-Signature-256` | `sha256=<hex>` HMAC of **raw** body with `GITHUB_WEBHOOK_SECRET` |
+| `X-GitHub-Event` | Event name |
+| `X-GitHub-Delivery` | Unique delivery id (idempotency key) |
+
+**Supported events (persisted):** `issues`, `pull_request` (all actions).  
+**Other signed events:** `200` `{ "status":"ignored", "reason":"unsupported_event" }` (not persisted).
+
+**Body limit:** `WEBHOOK_MAX_BODY_BYTES` (default 1 MiB) → `413` if exceeded.
+
+**Responses**
+
+| Case | HTTP | Body |
+| --- | --- | --- |
+| Persisted | 200 | `{ "status":"accepted" }` |
+| Duplicate delivery id | 200 | `{ "status":"already_received" }` |
+| Unknown / not connected repo | 200 | `{ "status":"ignored", "reason":"unknown_repository" }` |
+| Invalid / missing signature | **401** | `{ "error": { "code":"UNAUTHORIZED", ... } }` |
+| Missing event/delivery headers | 400 | structured error |
+| Invalid JSON / missing repo id | 400 | structured error |
+| DB failure | **500** | so GitHub can retry |
+
+New rows are stored with status **`pending`**. A background worker then claims them → `processed` (validation only) or retries/`failed`. HTTP webhook behavior is unchanged. No GitHub/Slack actions run yet.
 
 ---
 
@@ -100,4 +131,4 @@ Disconnects the local connection (idempotent). Does **not** delete GitHub webhoo
 
 ## Planned (not implemented)
 
-Webhooks, events, actions, rules, dashboard aggregations.
+Rules, GitHub/Slack actions, dashboard aggregations.

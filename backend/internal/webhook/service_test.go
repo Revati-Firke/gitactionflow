@@ -34,7 +34,7 @@ func newMemEvents() *memEvents {
 	return &memEvents{byID: map[string]store.WebhookEvent{}}
 }
 
-func (m *memEvents) InsertPending(_ context.Context, repositoryID uuid.UUID, deliveryID, eventType, action string, payload json.RawMessage) (store.WebhookEvent, error) {
+func (m *memEvents) InsertPendingWithMaxRetries(_ context.Context, repositoryID uuid.UUID, deliveryID, eventType, action string, payload json.RawMessage, maxRetries int) (store.WebhookEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.byID[deliveryID]; ok {
@@ -43,6 +43,7 @@ func (m *memEvents) InsertPending(_ context.Context, repositoryID uuid.UUID, del
 	e := store.WebhookEvent{
 		ID: uuid.New(), RepositoryID: repositoryID, DeliveryID: deliveryID,
 		EventType: eventType, Action: action, Payload: payload, Status: store.WebhookStatusPending,
+		MaxRetries: maxRetries,
 	}
 	m.byID[deliveryID] = e
 	return e, nil

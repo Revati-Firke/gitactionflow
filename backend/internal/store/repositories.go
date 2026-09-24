@@ -57,6 +57,26 @@ FROM repositories WHERE user_id = $1
 	return r, nil
 }
 
+// GetByID loads a connected repository by primary key.
+func (s *Repositories) GetByID(ctx context.Context, id uuid.UUID) (Repository, error) {
+	const q = `
+SELECT id, user_id, github_repository_id, name, full_name, owner_login,
+       default_branch, html_url, private, created_at, updated_at
+FROM repositories WHERE id = $1
+`
+	var r Repository
+	err := s.pool.QueryRow(ctx, q, id).Scan(
+		&r.ID, &r.UserID, &r.GitHubRepositoryID, &r.Name, &r.FullName, &r.OwnerLogin,
+		&r.DefaultBranch, &r.HTMLURL, &r.Private, &r.CreatedAt, &r.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Repository{}, ErrNotFound
+	}
+	if err != nil {
+		return Repository{}, fmt.Errorf("get repository by id: %w", err)
+	}
+	return r, nil
+}
 
 // GetByGitHubID finds a connected repository by GitHub's numeric repository id.
 func (s *Repositories) GetByGitHubID(ctx context.Context, githubRepoID int64) (Repository, error) {

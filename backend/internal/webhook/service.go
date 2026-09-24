@@ -24,13 +24,14 @@ type RepoFinder interface {
 
 // EventStore persists webhook deliveries.
 type EventStore interface {
-	InsertPending(ctx context.Context, repositoryID uuid.UUID, deliveryID, eventType, action string, payload json.RawMessage) (store.WebhookEvent, error)
+	InsertPendingWithMaxRetries(ctx context.Context, repositoryID uuid.UUID, deliveryID, eventType, action string, payload json.RawMessage, maxRetries int) (store.WebhookEvent, error)
 }
 
 // Service ingests verified GitHub webhook deliveries.
 type Service struct {
-	Repos  RepoFinder
-	Events EventStore
+	Repos      RepoFinder
+	Events     EventStore
+	MaxRetries int
 }
 
 // IngestInput is a verified webhook delivery ready for business validation.
@@ -77,13 +78,18 @@ func (s *Service) Ingest(ctx context.Context, in IngestInput) (IngestResult, err
 	repo, err := s.Repos.GetByGitHubID(ctx, env.Repo.ID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
+			// Avoid GitHub retry storms for repos we do not manage.
 			return IngestResult{Status: "ignored", Reason: "unknown_repository"}, nil
 		}
 		return IngestResult{}, fmt.Errorf("%w: %v", ErrPersistFailed, err)
 	}
 
 	payload := json.RawMessage(append([]byte(nil), in.RawBody...))
-	_, err = s.Events.InsertPending(ctx, repo.ID, in.DeliveryID, in.EventType, env.Action, payload)
+	maxRetries := s.MaxRetries
+	if maxRetries < 0 {
+		maxRetries = 3
+	}
+	_, err = s.Events.InsertPendingWithMaxRetries(ctx, repo.ID, in.DeliveryID, in.EventType, env.Action, payload, maxRetries)
 	if err != nil {
 		if errors.Is(err, store.ErrConflict) {
 			return IngestResult{Status: "already_received"}, nil
