@@ -69,11 +69,26 @@ Do not redesign the architecture without an ADR and explicit human agreement.
 
 | Area | Stack |
 | --- | --- |
-| Backend | Go, Gin (or lightweight equivalent), pgx, PostgreSQL |
+| Backend | Go, Gin, pgx, PostgreSQL, golang-migrate |
 | Frontend | React, TypeScript, Vite |
 | Integrations | GitHub OAuth / Webhooks / REST, Slack Incoming Webhook |
-| Local data | Docker Compose PostgreSQL |
+| Local data | Docker Compose PostgreSQL (+ optional backend service) |
 | Optional AI | Gemini or Groq (stretch only) |
+
+---
+
+## Backend conventions (Phase 2+)
+
+- Module path: `github.com/Revati-Firke/gitactionflow/backend`
+- Entrypoint: `cmd/server`
+- Domain/infra code under `internal/`
+- Prefer `pgx` + explicit SQL; no ORM without an ADR
+- Config via environment variables (`internal/config`); fail fast on missing required values
+- Structured logs via `log/slog` JSON; never log secrets (use `Config.Redacted()`)
+- HTTP errors use `{ "error": { "code", "message" } }` (`internal/http/response`)
+- Keep handlers thin; inject dependencies (e.g. `Pinger` for readiness)
+- SQL migrations live in `backend/migrations/` (`*.up.sql` / `*.down.sql`)
+- Do not expand scope into OAuth/webhooks/Slack/AI until that phase begins
 
 ---
 

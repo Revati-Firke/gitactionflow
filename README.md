@@ -6,25 +6,29 @@ GitActionFlow is a take-home engineering assessment for an Abstrabit Software En
 
 ---
 
-## Current status (Phase 1)
+## Current status (Phase 2)
 
-This repository is in **Phase 1: Project Foundation & Documentation**.
+This repository is in **Phase 2: Backend Foundation**.
 
 **What exists now**
 
-- Project structure (`backend/`, `frontend/`, `docs/`)
-- Architecture and design documentation
-- Security and reliability principles (documented, not yet implemented)
-- Developer / AI context (`AGENTS.md`)
-- Environment variable template (`.env.example`)
-- Local PostgreSQL scaffolding via `docker-compose.yml`
+- Project structure and Phase 1 documentation
+- Runnable Go backend (`backend/cmd/server`) with Gin
+- Environment-based configuration (`APP_ENV`, `APP_PORT`, `DATABASE_URL`, `LOG_LEVEL`, …)
+- PostgreSQL connectivity via pgx pool
+- SQL migrations (`golang-migrate`, embedded from `backend/migrations/`)
+- `GET /health` (liveness) and `GET /ready` (Postgres check)
+- Structured JSON logging (`log/slog`) and consistent HTTP error envelope
+- Graceful shutdown (SIGINT/SIGTERM)
+- Docker: backend `Dockerfile` + Compose services for Postgres and optional backend
+- Foundation unit tests
 
 **What is not implemented yet**
 
 - GitHub OAuth, sessions, or login UI
 - Webhook handling, event processing, or rule engine
 - GitHub API write-back or Slack notifications
-- Database schema / migrations
+- Full application schema (users, repos, rules, events, actions)
 - React dashboard pages
 - Public deployment
 - Optional AI triage
@@ -51,16 +55,17 @@ Everything must use **free tiers only** (no credit card).
 
 | Capability | Phase |
 | --- | --- |
+| Backend foundation (config, DB, health/ready) | **Phase 2 (done)** |
 | Publicly reachable web app | Later (deploy) |
-| GitHub OAuth sign-in | Phase 2+ |
-| Connect one owned repository | Phase 2+ |
-| Webhook endpoint (issues + pull requests) | Phase 2+ |
-| GitHub write-back (label / comment) | Phase 2+ |
-| Slack notifications | Phase 2+ |
-| Authenticated dashboard (repo, rules, events, actions) | Phase 2+ |
-| Configurable rules | Phase 2+ |
-| Webhook signature + delivery idempotency | Phase 2+ |
-| Durable processing without silent event loss | Phase 2+ |
+| GitHub OAuth sign-in | Phase 3+ |
+| Connect one owned repository | Later |
+| Webhook endpoint (issues + pull requests) | Later |
+| GitHub write-back (label / comment) | Later |
+| Slack notifications | Later |
+| Authenticated dashboard (repo, rules, events, actions) | Later |
+| Configurable rules | Later |
+| Webhook signature + delivery idempotency | Later |
+| Durable processing without silent event loss | Later |
 | Optional AI summary / label / priority (free provider) | Optional stretch |
 
 ---
@@ -122,28 +127,87 @@ See [docs/architecture/HLA.md](docs/architecture/HLA.md) for the full descriptio
 
 | Layer | Choice |
 | --- | --- |
-| Backend | Go + Gin (or equivalent lightweight HTTP framework) |
-| Database | PostgreSQL via pgx |
-| Frontend | React + TypeScript + Vite |
-| Auth | GitHub OAuth |
-| Integrations | GitHub Webhooks, GitHub REST API, Slack Incoming Webhook |
-| Containers | Docker / Docker Compose (local Postgres) |
+| Backend | Go 1.25+ + Gin |
+| Database | PostgreSQL via pgx; migrations via golang-migrate |
+| Frontend | React + TypeScript + Vite (not scaffolded yet) |
+| Auth | GitHub OAuth (not implemented yet) |
+| Integrations | GitHub Webhooks, GitHub REST API, Slack Incoming Webhook (not implemented yet) |
+| Containers | Docker / Docker Compose (Postgres + optional backend) |
 | Optional AI | Gemini or Groq (stretch only; never required for core path) |
 
 ---
 
-## Planned local development
+## Local development (backend)
 
-> Exact commands will be finalized when backend and frontend scaffolds land. Outline below.
+### Requirements
 
-1. Clone the repository.
-2. Copy `.env.example` → `.env` and fill values (never commit real secrets).
-3. Start PostgreSQL: `docker compose up -d`.
-4. Run the Go API from `backend/` (Phase 2+).
-5. Run the Vite React app from `frontend/` (Phase 2+).
-6. For webhook testing against a local machine, use a tunnel (e.g. Cloudflare Tunnel / similar free option) so GitHub can reach a public URL.
+- Go **1.25+**
+- Docker + `docker-compose` (or Compose v2 plugin)
+- PostgreSQL 16 (via Compose)
 
-Required environment variables are listed in [`.env.example`](.env.example).
+### PostgreSQL
+
+```bash
+# from repository root
+docker-compose up -d postgres
+```
+
+Default local credentials (examples only — see `.env.example`):
+
+```text
+postgres://gitactionflow:gitactionflow@localhost:5432/gitactionflow?sslmode=disable
+```
+
+### Environment variables
+
+Copy `.env.example` → `.env` and set at least:
+
+| Variable | Purpose | Example (local) |
+| --- | --- | --- |
+| `APP_ENV` | Environment name | `development` |
+| `APP_PORT` | HTTP listen port | `8080` |
+| `LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` |
+| `DATABASE_URL` | Postgres connection string | see above |
+| `AUTO_MIGRATE` | Apply SQL migrations on startup | `true` (default in development) |
+
+Future placeholders (`GITHUB_*`, `SLACK_WEBHOOK_URL`, `SESSION_SECRET`, AI keys) are listed in `.env.example` but unused in Phase 2.
+
+### Start the backend
+
+```bash
+cd backend
+export DATABASE_URL='postgres://gitactionflow:gitactionflow@localhost:5432/gitactionflow?sslmode=disable'
+export APP_ENV=development APP_PORT=8080 LOG_LEVEL=info AUTO_MIGRATE=true
+go run ./cmd/server
+```
+
+Or run everything in Compose:
+
+```bash
+docker-compose up -d --build
+```
+
+### Health and readiness
+
+```bash
+curl http://127.0.0.1:8080/health
+# {"status":"ok"}
+
+curl http://127.0.0.1:8080/ready
+# {"status":"ready"}   # 503 if Postgres is down
+```
+
+### Migrations
+
+With `AUTO_MIGRATE=true` (default in development), migrations under `backend/migrations/` apply on startup.
+
+Current migration: `000001_foundation` creates a minimal `app_meta` table only. Full product schema comes later.
+
+### Frontend
+
+Not started yet. React + Vite will land in a later phase.
+
+Webhook testing against a local machine will need a public tunnel once webhooks are implemented.
 
 ---
 
@@ -159,22 +223,29 @@ Free-tier oriented (verify current limits before choosing a provider):
 
 OAuth callbacks and webhooks **must** use the public HTTPS URL — not localhost.
 
-Details: [docs/deployment/README.md](docs/deployment/README.md).
+Backend hosts should configure `DATABASE_URL`, use `/health` for liveness and `/ready` for readiness, and allow graceful shutdown on SIGTERM. Details: [docs/deployment/README.md](docs/deployment/README.md).
 
-**Status:** Not deployed in Phase 1.
+**Status:** Not deployed yet.
 
 ---
 
-## Testing (planned)
+## Testing
 
-Phase 1 has no runtime code to test.
+Backend foundation tests:
 
-Later phases will cover:
+```bash
+cd backend
+go test ./...
+gofmt -l .
+go vet ./...
+```
+
+Later phases will add:
 
 - Unit tests for signature verification, idempotency, and rule matching
 - Handler tests with forged / replayed webhook fixtures
 - Integration tests against local PostgreSQL
-- Manual end-to-end checklist on the live URL (OAuth → connect repo → open issue/PR → dashboard + Slack)
+- Manual end-to-end checklist on the live URL
 
 ---
 
@@ -213,8 +284,8 @@ See [SECURITY.md](SECURITY.md).
 
 | Phase | Focus |
 | --- | --- |
-| **1 (current)** | Foundation, docs, conventions |
-| **2** | Backend scaffold, Postgres access, health, config |
+| **1** | Foundation, docs, conventions |
+| **2 (current)** | Backend scaffold, Postgres access, health, config |
 | **3** | Auth (GitHub OAuth + sessions) |
 | **4** | Repository connect + webhook registration |
 | **5** | Webhook ingest, persistence, idempotency |

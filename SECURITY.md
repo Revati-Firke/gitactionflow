@@ -60,6 +60,12 @@ X-Hub-Signature-256
 - Prefer well-maintained, minimal dependencies.
 - Do not vendor credentials in Docker images or CI logs.
 
-## What Phase 1 does not claim
+## What Phase 2 implements vs later
 
-Signature verification, OAuth state validation, and idempotency are **not implemented yet**. This document states the target bar for later phases.
+Phase 2 implements:
+
+- Environment-based config validation
+- Redacted startup logging for `DATABASE_URL` and known secret fields
+- Safe `/ready` responses that do not leak database errors
+
+Signature verification, OAuth state validation, and delivery idempotency remain **not implemented** yet.

@@ -1,0 +1,11 @@
+# Build context hygiene for backend image
+.git
+.gitignore
+*.md
+**/*_test.go
+.env
+.env.*
+!.env.example
+tmp/
+bin/
+dist/

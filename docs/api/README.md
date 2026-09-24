@@ -1,14 +1,62 @@
-# API Plan
+# API
 
-**Status:** Planned — **not implemented** in Phase 1.
+**Status:** Phase 2 — health/readiness implemented; all other categories remain planned.
 
-This document describes the intended HTTP API surface for the Go backend. Paths, payloads, and status codes will be refined when handlers are built. Treat names below as design direction, not a frozen contract.
-
-Base URL (planned): `/api` (or similar). All dashboard routes require an authenticated session unless noted.
+Base URL: the Go server root (default `http://localhost:8080`). Dashboard routes will later live under `/api` (exact prefix TBD).
 
 ---
 
-## Planned categories
+## Implemented
+
+### `GET /health`
+
+Liveness. Confirms the process is running. No authentication. Does not check PostgreSQL.
+
+**200**
+
+```json
+{ "status": "ok" }
+```
+
+### `GET /ready`
+
+Readiness. Pings PostgreSQL via the connection pool.
+
+**200** when the database is reachable:
+
+```json
+{ "status": "ready" }
+```
+
+**503** when the database is unavailable (no credentials or internal DB errors are exposed):
+
+```json
+{
+  "error": {
+    "code": "NOT_READY",
+    "message": "database unavailable"
+  }
+}
+```
+
+### Error envelope (shared)
+
+Client-facing errors use:
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "internal server error"
+  }
+}
+```
+
+Internal details stay in server logs only.
+
+---
+
+## Planned categories (not implemented)
 
 ```text
 Authentication
@@ -18,12 +66,9 @@ Webhooks
 Events
 Actions
 Dashboard
-Health
 ```
 
----
-
-## Authentication (planned)
+### Authentication (planned)
 
 | Concern | Direction |
 | --- | --- |
@@ -32,9 +77,7 @@ Health
 | Logout | Invalidate session |
 | Current user | Return authenticated profile (no secrets) |
 
----
-
-## Repositories (planned)
+### Repositories (planned)
 
 | Concern | Direction |
 | --- | --- |
@@ -45,9 +88,7 @@ Health
 
 Assignment core: **one** connected repository per user is sufficient.
 
----
-
-## Rules (planned)
+### Rules (planned)
 
 | Concern | Direction |
 | --- | --- |
@@ -55,9 +96,7 @@ Assignment core: **one** connected repository per user is sufficient.
 | Create / update / delete | Simple matchers (e.g. title contains keyword → label + Slack) |
 | Enable / disable | Soft control without deleting history |
 
----
-
-## Webhooks (planned)
+### Webhooks (planned)
 
 | Concern | Direction |
 | --- | --- |
@@ -66,58 +105,15 @@ Assignment core: **one** connected repository per user is sufficient.
 | Events | At least `issues` and `pull_request` |
 | Response | Success after durable persistence of the delivery |
 
-Not a dashboard CRUD API — a system integration endpoint.
+### Events / Actions / Dashboard (planned)
+
+Read models for webhook history, action outcomes, and a thin summary aggregation — all behind authentication once Phase 3+ lands.
 
 ---
 
-## Events (planned)
-
-| Concern | Direction |
-| --- | --- |
-| List events | Paginated history for the connected repo |
-| Event detail | Payload summary, delivery ID, processing status |
-
----
-
-## Actions (planned)
-
-| Concern | Direction |
-| --- | --- |
-| List actions | Actions taken (GitHub label/comment, Slack notify) |
-| Action detail | Status, error message if failed, timestamps |
-| Retry (optional later) | Re-attempt failed actions when safe |
-
----
-
-## Dashboard (planned)
-
-| Concern | Direction |
-| --- | --- |
-| Summary | Connected repo, recent events, recent actions, rule count |
-| May compose | Thin aggregation over Events + Actions + Repositories + Rules |
-
----
-
-## Health (planned)
-
-| Concern | Direction |
-| --- | --- |
-| Liveness | Process up |
-| Readiness | Database reachable (and other critical deps if any) |
-
-Health endpoints are typically unauthenticated and must not leak secrets or internal details.
-
----
-
-## Cross-cutting (planned)
+## Cross-cutting
 
 - JSON request/response
-- Consistent error shape
+- Consistent error shape (implemented)
 - No secret fields in responses
-- CSRF protection via OAuth `state` and session cookie practices appropriate to the chosen frontend hosting model
-
----
-
-## Implementation note
-
-Do not implement these routes in Phase 1. When implementing, update this document to mark endpoints as **implemented** vs **planned**.
+- CSRF protection via OAuth `state` (planned)
