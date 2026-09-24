@@ -6,28 +6,26 @@ GitActionFlow is a take-home engineering assessment for an Abstrabit Software En
 
 ---
 
-## Current status (Phase 4)
+## Current status (Phase 5)
 
-This repository is in **Phase 4: GitHub Repository Management**.
+This repository is in **Phase 5: GitHub Webhook Ingestion**.
 
 **What exists now**
 
-- OAuth login + sessions (Phase 3)
-- List GitHub repositories for the signed-in user
-- Connect / disconnect **exactly one** repository (admin access required)
-- Minimal React UI to sign in and manage that connection
-- Backend foundation (health, Postgres, migrations)
+- OAuth + one connected repository + minimal UI
+- `POST /webhooks/github` with HMAC signature verification
+- Issues + pull_request events persisted as `pending`
+- Delivery-ID idempotency (no duplicate rows)
 
 **What is not implemented yet**
 
-- Webhook registration or webhook endpoint
-- Event processing, rules, Slack, AI
-- Full event/action dashboard
-- Public deployment
+- Event processing / rule engine
+- GitHub labels/comments, Slack, AI
+- Event history dashboard UI
+- Automatic webhook registration on connect (configure webhook in GitHub manually for now)
 
-Webhook processing starts in Phase 5 — connecting a repository does **not** enable automation yet.
+Persisting a webhook does **not** run automation yet (Phase 6+).
 
----
 
 ## Assignment purpose
 

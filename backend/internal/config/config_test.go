@@ -14,6 +14,7 @@ func setAuthEnv(t *testing.T) {
 	t.Setenv("GITHUB_CLIENT_SECRET", "test-client-secret")
 	t.Setenv("GITHUB_OAUTH_REDIRECT_URL", "http://localhost:8080/auth/github/callback")
 	t.Setenv("SESSION_SECRET", "0123456789abcdef0123456789abcdef") // 32 chars
+	t.Setenv("GITHUB_WEBHOOK_SECRET", "webhook-secret-16+")
 	t.Setenv("FRONTEND_URL", "http://localhost:5173")
 }
 

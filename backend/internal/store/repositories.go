@@ -57,6 +57,29 @@ FROM repositories WHERE user_id = $1
 	return r, nil
 }
 
+
+// GetByGitHubID finds a connected repository by GitHub's numeric repository id.
+func (s *Repositories) GetByGitHubID(ctx context.Context, githubRepoID int64) (Repository, error) {
+	const q = `
+SELECT id, user_id, github_repository_id, name, full_name, owner_login,
+       default_branch, html_url, private, created_at, updated_at
+FROM repositories WHERE github_repository_id = $1
+LIMIT 1
+`
+	var r Repository
+	err := s.pool.QueryRow(ctx, q, githubRepoID).Scan(
+		&r.ID, &r.UserID, &r.GitHubRepositoryID, &r.Name, &r.FullName, &r.OwnerLogin,
+		&r.DefaultBranch, &r.HTMLURL, &r.Private, &r.CreatedAt, &r.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Repository{}, ErrNotFound
+	}
+	if err != nil {
+		return Repository{}, fmt.Errorf("get repository by github id: %w", err)
+	}
+	return r, nil
+}
+
 // Insert creates a connected repository. UNIQUE(user_id) enforces one-per-user.
 func (s *Repositories) Insert(ctx context.Context, userID uuid.UUID, githubRepoID int64, name, fullName, ownerLogin, defaultBranch, htmlURL string, private bool) (Repository, error) {
 	const q = `

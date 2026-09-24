@@ -27,6 +27,7 @@ type Config struct {
 	OAuthStateTTL          time.Duration
 	CookieSecure           bool
 	CookieSameSite         string
+	WebhookMaxBodyBytes    int64
 	AIAPIKey               string
 }
 
@@ -86,6 +87,12 @@ func Load() (Config, error) {
 	}
 	cfg.OAuthStateTTL = stateTTL
 
+	maxBody, err := parseInt64(getEnv("WEBHOOK_MAX_BODY_BYTES", "1048576")) // 1 MiB
+	if err != nil {
+		return Config{}, fmt.Errorf("WEBHOOK_MAX_BODY_BYTES: %w", err)
+	}
+	cfg.WebhookMaxBodyBytes = maxBody
+
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -120,6 +127,12 @@ func (c Config) Validate() error {
 	}
 	if len(strings.TrimSpace(c.SessionSecret)) < 32 {
 		return fmt.Errorf("SESSION_SECRET is required and must be at least 32 characters")
+	}
+	if len(strings.TrimSpace(c.GitHubWebhookSecret)) < 16 {
+		return fmt.Errorf("GITHUB_WEBHOOK_SECRET is required and must be at least 16 characters")
+	}
+	if c.WebhookMaxBodyBytes < 1024 || c.WebhookMaxBodyBytes > 10<<20 {
+		return fmt.Errorf("WEBHOOK_MAX_BODY_BYTES must be between 1KiB and 10MiB")
 	}
 	if c.SessionTTL <= 0 {
 		return fmt.Errorf("SESSION_TTL must be positive")
@@ -184,6 +197,14 @@ func parseDuration(raw string) (time.Duration, error) {
 		return 0, err
 	}
 	return d, nil
+}
+
+func parseInt64(raw string) (int64, error) {
+	v, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
 }
 
 func defaultAutoMigrate(appEnv string) string {

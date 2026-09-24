@@ -16,11 +16,12 @@ type Dependencies struct {
 	FrontendURL string
 	Auth        *handlers.AuthHandler
 	Repos       *handlers.RepositoryHandler
+	Webhooks    *handlers.GitHubWebhookHandler
 	AuthMW      middleware.AuthDeps
 	Log         *slog.Logger
 }
 
-// New builds the Gin engine with foundation, auth, and repository routes.
+// New builds the Gin engine with foundation, auth, repository, and webhook routes.
 func New(deps Dependencies) *gin.Engine {
 	if deps.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -33,6 +34,11 @@ func New(deps Dependencies) *gin.Engine {
 
 	r.GET("/health", handlers.Health)
 	r.GET("/ready", handlers.Ready(deps.DB))
+
+	if deps.Webhooks != nil {
+		// Public endpoint — authenticated by X-Hub-Signature-256, not session cookies.
+		r.POST("/webhooks/github", deps.Webhooks.HandlePOST)
+	}
 
 	if deps.Auth != nil {
 		r.GET("/auth/github", deps.Auth.StartGitHub)

@@ -4,15 +4,17 @@ Honest record of how AI tools were used on GitActionFlow. Fill in as development
 
 ## AI Tools Used
 
-_To be completed during development._
+Cursor agent (Composer) for Phase 5 webhook ingestion assistance.
 
 ## How AI Was Used
 
-_To be completed during development._
+Implemented signature verification, webhook handler, delivery-id idempotency, and pending persistence.
 
 ## Engineering Decisions Made by Me
 
-_To be completed during development._
+- Ack only after durable persist
+- Ignore unknown repos with 200 to avoid GitHub retry storms
+- No processing in the webhook request path
 
 ## Incorrect AI Suggestion / Hardest AI Mistake
 

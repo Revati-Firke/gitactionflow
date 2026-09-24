@@ -116,6 +116,18 @@ Do not redesign the architecture without an ADR and explicit human agreement.
 
 ---
 
+## Webhook rules (Phase 5+)
+
+- Always verify `X-Hub-Signature-256` over the **raw** request body
+- Use constant-time comparison (`hmac.Equal`)
+- Treat `X-GitHub-Delivery` as the idempotency key (DB unique constraint)
+- Never process/ack a delivery that was not durably persisted (DB errors → 5xx)
+- Never run downstream actions inside the webhook request
+- Never log webhook secrets or signature material
+- Bound webhook body size
+
+---
+
 ## Before modifying code
 
 1. Inspect the existing implementation and understand the architecture.

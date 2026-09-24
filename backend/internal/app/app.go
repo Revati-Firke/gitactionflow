@@ -23,6 +23,7 @@ import (
 	"github.com/Revati-Firke/gitactionflow/backend/internal/logging"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/reposervice"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/store"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/webhook"
 )
 
 // Run loads configuration, wires dependencies, serves HTTP, and shuts down gracefully.
@@ -67,6 +68,7 @@ func Run() error {
 	sessions := store.NewSessions(pool)
 	states := store.NewOAuthStates(pool)
 	repos := store.NewRepositories(pool)
+	webhookEvents := store.NewWebhookEvents(pool)
 	tokenKey := auth.DeriveKey(cfg.SessionSecret)
 
 	gh := githuboauth.New(githuboauth.Config{
@@ -102,12 +104,23 @@ func Run() error {
 		Log:     log,
 	}
 
+	webhookHandler := &handlers.GitHubWebhookHandler{
+		Service: &webhook.Service{
+			Repos:   repos,
+			Events:  webhookEvents,
+		},
+		Secret:  cfg.GitHubWebhookSecret,
+		MaxBody: cfg.WebhookMaxBodyBytes,
+		Log:     log,
+	}
+
 	engine := router.New(router.Dependencies{
 		DB:          poolPinger{pool: pool},
 		AppEnv:      cfg.AppEnv,
 		FrontendURL: cfg.FrontendURL,
 		Auth:        authHandler,
 		Repos:       repoHandler,
+		Webhooks:    webhookHandler,
 		AuthMW: middleware.AuthDeps{
 			Sessions: sessions,
 			Users:    users,
