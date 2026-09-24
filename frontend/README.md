@@ -1,16 +1,21 @@
 # Frontend
 
-React + TypeScript + Vite dashboard for GitActionFlow.
+React + TypeScript + Vite UI for GitActionFlow.
 
-**Phase 1:** Directory reserved. No application code yet.
+**Phase 4:** Sign in and connect one GitHub repository.
 
-Planned contents (later phases):
+## Run
 
-- Vite + React + TypeScript scaffold
-- Login / OAuth redirect UX
-- Authenticated dashboard (repo, rules, events, actions)
-- API client talking to the Go backend
+See **[docs/setup/LOCAL.md](../docs/setup/LOCAL.md)** for OAuth + full local steps.
 
-Secrets must never be placed in frontend env vars that are exposed to the browser.
+```bash
+# backend must already be on :8080 with .env configured
+npm install
+npm run dev
+```
 
-See root `README.md`, `AGENTS.md`, and `docs/architecture/HLA.md`.
+Open http://localhost:5173 — always use `localhost` (not `127.0.0.1`) so the session cookie matches.
+
+## Not included yet
+
+Rules UI, event/action logs, webhook setup, Slack, AI.

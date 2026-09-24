@@ -6,26 +6,26 @@ GitActionFlow is a take-home engineering assessment for an Abstrabit Software En
 
 ---
 
-## Current status (Phase 3)
+## Current status (Phase 4)
 
-This repository is in **Phase 3: GitHub OAuth Authentication**.
+This repository is in **Phase 4: GitHub Repository Management**.
 
 **What exists now**
 
-- Phase 1 docs + Phase 2 backend foundation
-- GitHub OAuth login (`/auth/github`, `/auth/github/callback`)
-- Server-side sessions + `GET /api/me` + `POST /auth/logout`
-- Encrypted GitHub access token storage (for later repo API use)
-- Auth unit tests (mocked GitHub)
+- OAuth login + sessions (Phase 3)
+- List GitHub repositories for the signed-in user
+- Connect / disconnect **exactly one** repository (admin access required)
+- Minimal React UI to sign in and manage that connection
+- Backend foundation (health, Postgres, migrations)
 
 **What is not implemented yet**
 
-- Repository connection / webhook registration
+- Webhook registration or webhook endpoint
 - Event processing, rules, Slack, AI
-- React dashboard (full)
+- Full event/action dashboard
 - Public deployment
 
-Do not assume repository automation works until later phases.
+Webhook processing starts in Phase 5 — connecting a repository does **not** enable automation yet.
 
 ---
 
@@ -49,9 +49,9 @@ Everything must use **free tiers only** (no credit card).
 | --- | --- |
 | Backend foundation (config, DB, health/ready) | **Phase 2 (done)** |
 | GitHub OAuth sign-in + sessions | **Phase 3 (done)** |
+| Connect one owned repository | **Phase 4 (done)** |
 | Publicly reachable web app | Later (deploy) |
-| Connect one owned repository | Phase 4+ |
-| Webhook endpoint (issues + pull requests) | Later |
+| Webhook endpoint (issues + pull requests) | Phase 5+ |
 | GitHub write-back (label / comment) | Later |
 | Slack notifications | Later |
 | Authenticated dashboard (repo, rules, events, actions) | Later |
@@ -131,11 +131,14 @@ See [docs/architecture/HLA.md](docs/architecture/HLA.md) for the full descriptio
 
 ## Local development (backend)
 
+**Full walkthrough (OAuth App + test checklist):** [docs/setup/LOCAL.md](docs/setup/LOCAL.md)
+
 ### Requirements
 
 - Go **1.25+**
-- Docker + `docker-compose` (or Compose v2 plugin)
+- Docker + `docker-compose`
 - PostgreSQL 16 (via Compose)
+- GitHub OAuth App (see setup doc)
 
 ### PostgreSQL
 
@@ -173,13 +176,11 @@ Future placeholders (`GITHUB_WEBHOOK_SECRET`, `SLACK_WEBHOOK_URL`, AI keys) are 
 
 ### GitHub OAuth App (local)
 
-1. Open [GitHub Developer Settings → OAuth Apps](https://github.com/settings/developers) → **New OAuth App**.
-2. **Application name:** GitActionFlow (local)
-3. **Homepage URL:** `http://localhost:5173`
-4. **Authorization callback URL:** `http://localhost:8080/auth/github/callback`
-5. Copy Client ID and generate a Client Secret into `.env` (never commit them).
+See **[docs/setup/LOCAL.md](docs/setup/LOCAL.md)** for exact form fields and troubleshooting.
 
-Scopes requested by the app: `read:user repo` (user identity + later repo automation). See [ADR-005](docs/decisions/ADR-005-sessions-and-token-encryption.md).
+Summary: create an **OAuth App** with callback `http://localhost:8080/auth/github/callback`, put Client ID/secret in `.env`, use **`localhost` only** (not `127.0.0.1`), restart the backend, open `http://localhost:5173`.
+
+Scopes: `read:user repo`. Details: [ADR-005](docs/decisions/ADR-005-sessions-and-token-encryption.md).
 
 ### Start the backend
 
@@ -195,20 +196,29 @@ export FRONTEND_URL=http://localhost:5173
 go run ./cmd/server
 ```
 
-### Authentication flow (manual check)
+### Repository connection (manual check)
+
+After signing in (cookie jar or the React UI):
 
 ```bash
-# 1) Start OAuth (opens GitHub in browser)
-xdg-open http://127.0.0.1:8080/auth/github   # or open the URL manually
+# List GitHub repos (server uses encrypted user token)
+curl -sS -b /tmp/gaf.jar http://127.0.0.1:8080/api/github/repositories
 
-# 2) After GitHub redirects back, cookie is set. Then:
-curl -sS -c /tmp/gaf.jar -b /tmp/gaf.jar http://127.0.0.1:8080/api/me
+# Connect by GitHub repository id only (metadata comes from GitHub)
+curl -sS -b /tmp/gaf.jar -H 'Content-Type: application/json' \
+  -d '{"github_repository_id":123456}' \
+  http://127.0.0.1:8080/api/repository
 
-# 3) Logout
-curl -sS -c /tmp/gaf.jar -b /tmp/gaf.jar -X POST http://127.0.0.1:8080/auth/logout
+# Show / disconnect
+curl -sS -b /tmp/gaf.jar http://127.0.0.1:8080/api/repository
+curl -sS -b /tmp/gaf.jar -X DELETE http://127.0.0.1:8080/api/repository
 ```
 
-Unauthenticated `/api/me` returns `401` with the standard error envelope.
+**Access rule:** connect requires GitHub `admin` permission on the repository (owners have admin).  
+**One-repo rule:** disconnect the current repository before connecting another (`409` otherwise).  
+**Scopes:** OAuth uses `read:user repo`.
+
+Webhook registration / processing is **not** implemented yet.
 
 ### Health and readiness
 
@@ -219,11 +229,17 @@ curl http://127.0.0.1:8080/ready
 
 ### Migrations
 
-With `AUTO_MIGRATE=true`, migrations under `backend/migrations/` apply on startup (`000001_foundation`, `000002_auth`).
+With `AUTO_MIGRATE=true`, migrations apply on startup (`000001` foundation, `000002` auth, `000003` repositories).
 
-### Frontend
+### Frontend (minimal)
 
-Full dashboard is not built yet. OAuth can be verified with a browser + cookie jar as above.
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 — sign in, pick one repository, connect/disconnect. No rules or event logs yet.
 
 ---
 
@@ -283,6 +299,7 @@ See [SECURITY.md](SECURITY.md).
 
 | Doc | Purpose |
 | --- | --- |
+| [docs/setup/LOCAL.md](docs/setup/LOCAL.md) | Local setup, OAuth App, test steps |
 | [AGENTS.md](AGENTS.md) | AI / developer working rules |
 | [AI_NOTES.md](AI_NOTES.md) | Honest AI collaboration notes (fill during development) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute; commit conventions |
@@ -302,8 +319,8 @@ See [SECURITY.md](SECURITY.md).
 | --- | --- |
 | **1** | Foundation, docs, conventions |
 | **2** | Backend scaffold, Postgres access, health, config |
-| **3 (current)** | Auth (GitHub OAuth + sessions) |
-| **4** | Repository connect + webhook registration |
+| **3** | Auth (GitHub OAuth + sessions) |
+| **4 (current)** | Repository connect (one repo) |
 | **5** | Webhook ingest, persistence, idempotency |
 | **6** | Rule engine + GitHub / Slack actions |
 | **7** | React dashboard |

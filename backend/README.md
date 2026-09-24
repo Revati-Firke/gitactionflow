@@ -2,56 +2,42 @@
 
 Go HTTP API for GitActionFlow.
 
-**Phase 3 status:** Foundation + GitHub OAuth authentication.
+**Phase 4 status:** Foundation + OAuth + one-repository connection.
 
 ## Requirements
 
 - Go **1.25+**
-- PostgreSQL 16 (local via Docker Compose)
-- GitHub OAuth App credentials
-
-## Layout
-
-```text
-backend/
-├── cmd/server/
-├── internal/
-│   ├── app/
-│   ├── auth/           # cookies, crypto, context
-│   ├── config/
-│   ├── database/
-│   ├── githuboauth/    # GitHub OAuth HTTP client
-│   ├── http/
-│   │   ├── handlers/
-│   │   ├── middleware/
-│   │   ├── response/
-│   │   └── router/
-│   ├── logging/
-│   └── store/          # users, sessions, oauth_states
-├── migrations/
-├── Dockerfile
-├── go.mod
-└── go.sum
-```
+- PostgreSQL 16
+- GitHub OAuth App (`read:user repo`)
 
 ## Quick start
 
+Full local OAuth + test steps: [docs/setup/LOCAL.md](../docs/setup/LOCAL.md)
+
 ```bash
 docker-compose up -d postgres
-cp ../.env.example ../.env   # fill GitHub + SESSION_SECRET
+# configure ../.env then:
 cd backend
 set -a && source ../.env && set +a
 go run ./cmd/server
 ```
 
-## Auth endpoints
+## Endpoints
 
 | Method | Path | Auth |
 | --- | --- | --- |
+| GET | `/health` | no |
+| GET | `/ready` | no |
 | GET | `/auth/github` | no |
 | GET | `/auth/github/callback` | no |
-| POST | `/auth/logout` | cookie optional (idempotent) |
-| GET | `/api/me` | session cookie required |
+| POST | `/auth/logout` | cookie optional |
+| GET | `/api/me` | session |
+| GET | `/api/github/repositories` | session |
+| GET | `/api/repository` | session |
+| POST | `/api/repository` | session |
+| DELETE | `/api/repository` | session |
+
+Connect requires GitHub **admin** on the repo. One connected repo per user.
 
 ## Tests
 
@@ -63,4 +49,4 @@ go vet ./...
 
 ## Not implemented yet
 
-Repository connect, webhooks, rules, Slack, AI, dashboard APIs.
+Webhooks, rules, Slack, AI, event dashboard.

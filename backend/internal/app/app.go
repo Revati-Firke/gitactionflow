@@ -15,11 +15,13 @@ import (
 	"github.com/Revati-Firke/gitactionflow/backend/internal/auth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/config"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/database"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/githubapi"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/githuboauth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/http/handlers"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/http/middleware"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/http/router"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/logging"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/reposervice"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/store"
 )
 
@@ -64,6 +66,7 @@ func Run() error {
 	users := store.NewUsers(pool)
 	sessions := store.NewSessions(pool)
 	states := store.NewOAuthStates(pool)
+	repos := store.NewRepositories(pool)
 	tokenKey := auth.DeriveKey(cfg.SessionSecret)
 
 	gh := githuboauth.New(githuboauth.Config{
@@ -88,11 +91,23 @@ func Run() error {
 		Log:         log,
 	}
 
+	repoService := &reposervice.Service{
+		GitHub:   githubapi.New(nil),
+		Users:    users,
+		Repos:    repos,
+		TokenKey: tokenKey,
+	}
+	repoHandler := &handlers.RepositoryHandler{
+		Service: repoService,
+		Log:     log,
+	}
+
 	engine := router.New(router.Dependencies{
 		DB:          poolPinger{pool: pool},
 		AppEnv:      cfg.AppEnv,
 		FrontendURL: cfg.FrontendURL,
 		Auth:        authHandler,
+		Repos:       repoHandler,
 		AuthMW: middleware.AuthDeps{
 			Sessions: sessions,
 			Users:    users,

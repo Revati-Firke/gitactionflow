@@ -104,6 +104,18 @@ Do not redesign the architecture without an ADR and explicit human agreement.
 
 ---
 
+## Repository management rules (Phase 4+)
+
+- Never trust repository metadata from the client; re-fetch from GitHub by id
+- Require GitHub `admin` permission before connecting
+- Scope all repository queries to the authenticated user id from the session
+- Enforce one connected repository per user (disconnect before switching)
+- Never expose GitHub tokens to the frontend or logs
+- Keep GitHub REST calls behind `internal/githubapi`; keep handlers thin
+- Do not register or delete webhooks until the webhook phase
+
+---
+
 ## Before modifying code
 
 1. Inspect the existing implementation and understand the architecture.

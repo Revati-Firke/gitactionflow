@@ -15,11 +15,12 @@ type Dependencies struct {
 	AppEnv      string
 	FrontendURL string
 	Auth        *handlers.AuthHandler
+	Repos       *handlers.RepositoryHandler
 	AuthMW      middleware.AuthDeps
 	Log         *slog.Logger
 }
 
-// New builds the Gin engine with foundation and auth routes.
+// New builds the Gin engine with foundation, auth, and repository routes.
 func New(deps Dependencies) *gin.Engine {
 	if deps.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -41,6 +42,13 @@ func New(deps Dependencies) *gin.Engine {
 		api := r.Group("/api")
 		api.Use(middleware.RequireAuth(deps.AuthMW))
 		api.GET("/me", handlers.Me)
+
+		if deps.Repos != nil {
+			api.GET("/github/repositories", deps.Repos.ListGitHubRepositories)
+			api.GET("/repository", deps.Repos.GetConnected)
+			api.POST("/repository", deps.Repos.Connect)
+			api.DELETE("/repository", deps.Repos.Disconnect)
+		}
 	}
 
 	return r

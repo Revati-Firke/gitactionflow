@@ -1,6 +1,6 @@
 # High-Level Architecture (HLA)
 
-**Status:** Phase 3 — auth implemented; repository/webhooks/rules still planned.
+**Status:** Phase 4 — auth + one-repo connection implemented; webhooks/rules still planned.
 
 **Project:** GitActionFlow — event-driven automation for Git repositories.
 
@@ -76,8 +76,8 @@ GitHub Repository
 | Component | Responsibility |
 | --- | --- |
 | React Web Dashboard | Login-gated UI: connected repo, rules, event/action history |
-| Auth module | GitHub OAuth start/callback, session establishment, CSRF `state` (**implemented Phase 3**) |
-| Repository management | Connect one owned repo; store webhook configuration metadata (**planned**) |
+| Auth module | GitHub OAuth start/callback, session establishment, CSRF `state` (**implemented**) |
+| Repository management | Connect one owned/admin repo; persist connection (**implemented Phase 4**; webhook registration later) |
 | Dashboard APIs | Read models for events, actions, rules, connection status |
 | Webhook handler | Signature verify, validate, dedupe, durable persist |
 | Event processor | Load pending events, apply rules, enqueue/execute actions |
@@ -127,6 +127,26 @@ Redirect → FRONTEND_URL
 Protected APIs (e.g. `GET /api/me`) read the cookie, validate the session hash and expiry, and load the user. Logout deletes the session and clears the cookie.
 
 Details: [ADR-005](../decisions/ADR-005-sessions-and-token-encryption.md).
+
+---
+
+## Repository management flow (Phase 4 — implemented)
+
+```text
+Authenticated User
+       ↓
+GET /api/github/repositories  → GitHub API (user token, server-side)
+       ↓
+POST /api/repository { github_repository_id }
+       ↓
+Fetch repo from GitHub → require permissions.admin
+       ↓
+Enforce one-repo-per-user → PostgreSQL repositories
+       ↓
+GET /api/repository / DELETE /api/repository
+```
+
+Webhook registration is intentionally deferred to Phase 5+.
 
 ---
 

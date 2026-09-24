@@ -63,3 +63,20 @@ FROM users WHERE id = $1
 	}
 	return u, nil
 }
+
+// GetEncryptedAccessToken returns the encrypted GitHub token bytes for a user.
+func (s *Users) GetEncryptedAccessToken(ctx context.Context, id uuid.UUID) ([]byte, error) {
+	const q = `SELECT github_access_token_encrypted FROM users WHERE id = $1`
+	var enc []byte
+	err := s.pool.QueryRow(ctx, q, id).Scan(&enc)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get access token: %w", err)
+	}
+	if len(enc) == 0 {
+		return nil, ErrNotFound
+	}
+	return enc, nil
+}

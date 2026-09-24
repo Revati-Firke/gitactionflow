@@ -14,6 +14,7 @@ import (
 )
 
 var ErrNotFound = errors.New("not found")
+var ErrConflict = errors.New("conflict")
 
 // Sessions persists server-side sessions (token hashes only).
 type Sessions struct {
