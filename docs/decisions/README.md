@@ -14,6 +14,7 @@ ADRs capture **why** we chose an approach, not only what we built.
 | ADR-002 | PostgreSQL as Source of Truth | Accepted (placeholder) |
 | ADR-003 | Webhook Idempotency | Accepted (placeholder) |
 | ADR-004 | AI Provider Abstraction | Proposed (placeholder; optional stretch) |
+| [ADR-005](./ADR-005-sessions-and-token-encryption.md) | Server-side sessions and encrypted GitHub tokens | Accepted |
 
 ---
 

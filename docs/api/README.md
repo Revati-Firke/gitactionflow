@@ -1,8 +1,8 @@
 # API
 
-**Status:** Phase 2 — health/readiness implemented; all other categories remain planned.
+**Status:** Phase 3 — health/readiness + GitHub OAuth auth implemented. Repository/webhooks/rules remain planned.
 
-Base URL: the Go server root (default `http://localhost:8080`). Dashboard routes will later live under `/api` (exact prefix TBD).
+Base URL: Go server root (default `http://localhost:8080`).
 
 ---
 
@@ -10,38 +10,76 @@ Base URL: the Go server root (default `http://localhost:8080`). Dashboard routes
 
 ### `GET /health`
 
-Liveness. Confirms the process is running. No authentication. Does not check PostgreSQL.
+Liveness. No authentication.
+
+**200** `{"status":"ok"}`
+
+### `GET /ready`
+
+Readiness (PostgreSQL ping). No authentication.
+
+**200** `{"status":"ready"}`  
+**503** structured `NOT_READY` if database unavailable
+
+### `GET /auth/github`
+
+Starts GitHub OAuth. No session required.
+
+- Generates cryptographically random `state`, stores hash with TTL
+- Redirects (`302`) to GitHub authorize URL
+
+### `GET /auth/github/callback`
+
+OAuth callback from GitHub. No session required.
+
+Query params: `code`, `state` (or `error` on denial).
+
+- Validates/consumes `state` (reject missing, invalid, expired, reused)
+- Exchanges code, fetches GitHub user, upserts local user
+- Creates server-side session + `HttpOnly` cookie `gaf_session`
+- Redirects to `FRONTEND_URL` (on failure, redirects with `?error=...`)
+
+Never returns GitHub access tokens in the response body or redirect URL.
+
+### `POST /auth/logout`
+
+Invalidates the current session if present and clears the cookie. **Idempotent.**
+
+**200** `{"status":"ok"}`
+
+### `GET /api/me`
+
+Requires valid session cookie.
 
 **200**
 
 ```json
-{ "status": "ok" }
-```
-
-### `GET /ready`
-
-Readiness. Pings PostgreSQL via the connection pool.
-
-**200** when the database is reachable:
-
-```json
-{ "status": "ready" }
-```
-
-**503** when the database is unavailable (no credentials or internal DB errors are exposed):
-
-```json
 {
-  "error": {
-    "code": "NOT_READY",
-    "message": "database unavailable"
+  "user": {
+    "id": "...",
+    "github_username": "...",
+    "display_name": "...",
+    "avatar_url": "..."
   }
 }
 ```
 
-### Error envelope (shared)
+**401**
 
-Client-facing errors use:
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "authentication required"
+  }
+}
+```
+
+Does not include access tokens or secrets.
+
+---
+
+## Error envelope
 
 ```json
 {
@@ -52,14 +90,12 @@ Client-facing errors use:
 }
 ```
 
-Internal details stay in server logs only.
-
 ---
 
-## Planned categories (not implemented)
+## Planned (not implemented)
 
 ```text
-Authentication
+Authentication extras beyond above — none required
 Repositories
 Rules
 Webhooks
@@ -68,52 +104,4 @@ Actions
 Dashboard
 ```
 
-### Authentication (planned)
-
-| Concern | Direction |
-| --- | --- |
-| Start OAuth | Redirect user to GitHub authorize URL with `state` |
-| OAuth callback | Exchange code, validate `state`, create session |
-| Logout | Invalidate session |
-| Current user | Return authenticated profile (no secrets) |
-
-### Repositories (planned)
-
-| Concern | Direction |
-| --- | --- |
-| List owned repos | Via GitHub API using stored user token (server-side) |
-| Connect repository | Persist one connected repo; configure webhook |
-| Connected status | Return current connection metadata (no secrets) |
-| Disconnect | Remove connection / disable webhook (later) |
-
-Assignment core: **one** connected repository per user is sufficient.
-
-### Rules (planned)
-
-| Concern | Direction |
-| --- | --- |
-| List rules | Rules for the connected repository |
-| Create / update / delete | Simple matchers (e.g. title contains keyword → label + Slack) |
-| Enable / disable | Soft control without deleting history |
-
-### Webhooks (planned)
-
-| Concern | Direction |
-| --- | --- |
-| Ingest endpoint | Public `POST` for GitHub deliveries |
-| Auth model | `X-Hub-Signature-256` — not session cookies |
-| Events | At least `issues` and `pull_request` |
-| Response | Success after durable persistence of the delivery |
-
-### Events / Actions / Dashboard (planned)
-
-Read models for webhook history, action outcomes, and a thin summary aggregation — all behind authentication once Phase 3+ lands.
-
----
-
-## Cross-cutting
-
-- JSON request/response
-- Consistent error shape (implemented)
-- No secret fields in responses
-- CSRF protection via OAuth `state` (planned)
+See earlier Phase 1 plans for direction. Do not treat those routes as available.

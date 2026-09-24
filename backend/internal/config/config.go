@@ -5,10 +5,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds application configuration loaded from the environment.
-// Future integration fields are optional placeholders and are not used in Phase 2.
 type Config struct {
 	AppEnv      string
 	AppPort     int
@@ -16,13 +16,18 @@ type Config struct {
 	LogLevel    string
 	AutoMigrate bool
 
-	// Future placeholders (optional; not required for Phase 2).
-	GitHubClientID      string
-	GitHubClientSecret  string
-	GitHubWebhookSecret string
-	SlackWebhookURL     string
-	SessionSecret       string
-	AIAPIKey            string
+	FrontendURL            string
+	GitHubClientID         string
+	GitHubClientSecret     string
+	GitHubOAuthRedirectURL string
+	GitHubWebhookSecret    string
+	SlackWebhookURL        string
+	SessionSecret          string
+	SessionTTL             time.Duration
+	OAuthStateTTL          time.Duration
+	CookieSecure           bool
+	CookieSameSite         string
+	AIAPIKey               string
 }
 
 // Load reads configuration from environment variables, applies defaults, and validates.
@@ -32,12 +37,19 @@ func Load() (Config, error) {
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 		DatabaseURL: strings.TrimSpace(os.Getenv("DATABASE_URL")),
 
-		GitHubClientID:      os.Getenv("GITHUB_CLIENT_ID"),
-		GitHubClientSecret:  os.Getenv("GITHUB_CLIENT_SECRET"),
-		GitHubWebhookSecret: os.Getenv("GITHUB_WEBHOOK_SECRET"),
-		SlackWebhookURL:     os.Getenv("SLACK_WEBHOOK_URL"),
-		SessionSecret:       os.Getenv("SESSION_SECRET"),
-		AIAPIKey:            firstNonEmpty(os.Getenv("AI_API_KEY"), os.Getenv("GEMINI_API_KEY"), os.Getenv("GROQ_API_KEY")),
+		FrontendURL:            firstNonEmpty(os.Getenv("FRONTEND_URL"), os.Getenv("FRONTEND_ORIGIN")),
+		GitHubClientID:         strings.TrimSpace(os.Getenv("GITHUB_CLIENT_ID")),
+		GitHubClientSecret:     os.Getenv("GITHUB_CLIENT_SECRET"),
+		GitHubOAuthRedirectURL: getEnv("GITHUB_OAUTH_REDIRECT_URL", "http://localhost:8080/auth/github/callback"),
+		GitHubWebhookSecret:    os.Getenv("GITHUB_WEBHOOK_SECRET"),
+		SlackWebhookURL:        os.Getenv("SLACK_WEBHOOK_URL"),
+		SessionSecret:          os.Getenv("SESSION_SECRET"),
+		CookieSameSite:         getEnv("COOKIE_SAMESITE", "Lax"),
+		AIAPIKey:               firstNonEmpty(os.Getenv("AI_API_KEY"), os.Getenv("GEMINI_API_KEY"), os.Getenv("GROQ_API_KEY")),
+	}
+
+	if cfg.FrontendURL == "" {
+		cfg.FrontendURL = "http://localhost:5173"
 	}
 
 	port, err := parsePort(getEnv("APP_PORT", "8080"))
@@ -51,6 +63,28 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("AUTO_MIGRATE: %w", err)
 	}
 	cfg.AutoMigrate = autoMigrate
+
+	secureDefault := "false"
+	if strings.EqualFold(cfg.AppEnv, "production") {
+		secureDefault = "true"
+	}
+	cookieSecure, err := parseBool(getEnv("COOKIE_SECURE", secureDefault))
+	if err != nil {
+		return Config{}, fmt.Errorf("COOKIE_SECURE: %w", err)
+	}
+	cfg.CookieSecure = cookieSecure
+
+	sessionTTL, err := parseDuration(getEnv("SESSION_TTL", "168h")) // 7 days
+	if err != nil {
+		return Config{}, fmt.Errorf("SESSION_TTL: %w", err)
+	}
+	cfg.SessionTTL = sessionTTL
+
+	stateTTL, err := parseDuration(getEnv("OAUTH_STATE_TTL", "10m"))
+	if err != nil {
+		return Config{}, fmt.Errorf("OAUTH_STATE_TTL: %w", err)
+	}
+	cfg.OAuthStateTTL = stateTTL
 
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -71,6 +105,35 @@ func (c Config) Validate() error {
 	}
 	if !validLogLevel(c.LogLevel) {
 		return fmt.Errorf("LOG_LEVEL must be one of: debug, info, warn, error")
+	}
+	if strings.TrimSpace(c.FrontendURL) == "" {
+		return fmt.Errorf("FRONTEND_URL is required")
+	}
+	if strings.TrimSpace(c.GitHubClientID) == "" {
+		return fmt.Errorf("GITHUB_CLIENT_ID is required")
+	}
+	if strings.TrimSpace(c.GitHubClientSecret) == "" {
+		return fmt.Errorf("GITHUB_CLIENT_SECRET is required")
+	}
+	if strings.TrimSpace(c.GitHubOAuthRedirectURL) == "" {
+		return fmt.Errorf("GITHUB_OAUTH_REDIRECT_URL is required")
+	}
+	if len(strings.TrimSpace(c.SessionSecret)) < 32 {
+		return fmt.Errorf("SESSION_SECRET is required and must be at least 32 characters")
+	}
+	if c.SessionTTL <= 0 {
+		return fmt.Errorf("SESSION_TTL must be positive")
+	}
+	if c.OAuthStateTTL <= 0 {
+		return fmt.Errorf("OAUTH_STATE_TTL must be positive")
+	}
+	switch strings.ToLower(c.CookieSameSite) {
+	case "lax", "strict", "none":
+	default:
+		return fmt.Errorf("COOKIE_SAMESITE must be one of: Lax, Strict, None")
+	}
+	if strings.EqualFold(c.CookieSameSite, "none") && !c.CookieSecure {
+		return fmt.Errorf("COOKIE_SAMESITE=None requires COOKIE_SECURE=true")
 	}
 	return nil
 }
@@ -115,6 +178,14 @@ func parseBool(raw string) (bool, error) {
 	return v, nil
 }
 
+func parseDuration(raw string) (time.Duration, error) {
+	d, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, err
+	}
+	return d, nil
+}
+
 func defaultAutoMigrate(appEnv string) string {
 	if strings.EqualFold(appEnv, "development") || strings.EqualFold(appEnv, "test") {
 		return "true"
@@ -134,7 +205,7 @@ func validLogLevel(level string) bool {
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
-			return v
+			return strings.TrimSpace(v)
 		}
 	}
 	return ""
@@ -151,7 +222,6 @@ func redactURL(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return ""
 	}
-	// Avoid logging credentials embedded in postgres://user:pass@host/db
 	if i := strings.Index(raw, "://"); i >= 0 {
 		rest := raw[i+3:]
 		if at := strings.Index(rest, "@"); at >= 0 {

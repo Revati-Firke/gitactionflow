@@ -40,6 +40,14 @@ services:
       AUTO_MIGRATE: "true"
       # Host "postgres" is the compose service name (not localhost).
       DATABASE_URL: postgres://gitactionflow:gitactionflow@postgres:5432/gitactionflow?sslmode=disable
+      FRONTEND_URL: http://localhost:5173
+      # Provide real values via a local .env file or overrides — placeholders will not complete OAuth.
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-replace_me}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-replace_me}
+      GITHUB_OAUTH_REDIRECT_URL: http://localhost:8080/auth/github/callback
+      SESSION_SECRET: ${SESSION_SECRET:-0123456789abcdef0123456789abcdef}
+      COOKIE_SECURE: "false"
+      COOKIE_SAMESITE: Lax
     ports:
       - "8080:8080"
     healthcheck:

@@ -6,34 +6,26 @@ GitActionFlow is a take-home engineering assessment for an Abstrabit Software En
 
 ---
 
-## Current status (Phase 2)
+## Current status (Phase 3)
 
-This repository is in **Phase 2: Backend Foundation**.
+This repository is in **Phase 3: GitHub OAuth Authentication**.
 
 **What exists now**
 
-- Project structure and Phase 1 documentation
-- Runnable Go backend (`backend/cmd/server`) with Gin
-- Environment-based configuration (`APP_ENV`, `APP_PORT`, `DATABASE_URL`, `LOG_LEVEL`, …)
-- PostgreSQL connectivity via pgx pool
-- SQL migrations (`golang-migrate`, embedded from `backend/migrations/`)
-- `GET /health` (liveness) and `GET /ready` (Postgres check)
-- Structured JSON logging (`log/slog`) and consistent HTTP error envelope
-- Graceful shutdown (SIGINT/SIGTERM)
-- Docker: backend `Dockerfile` + Compose services for Postgres and optional backend
-- Foundation unit tests
+- Phase 1 docs + Phase 2 backend foundation
+- GitHub OAuth login (`/auth/github`, `/auth/github/callback`)
+- Server-side sessions + `GET /api/me` + `POST /auth/logout`
+- Encrypted GitHub access token storage (for later repo API use)
+- Auth unit tests (mocked GitHub)
 
 **What is not implemented yet**
 
-- GitHub OAuth, sessions, or login UI
-- Webhook handling, event processing, or rule engine
-- GitHub API write-back or Slack notifications
-- Full application schema (users, repos, rules, events, actions)
-- React dashboard pages
+- Repository connection / webhook registration
+- Event processing, rules, Slack, AI
+- React dashboard (full)
 - Public deployment
-- Optional AI triage
 
-Do not assume features listed under “Core functionality (planned)” work until later phases land them.
+Do not assume repository automation works until later phases.
 
 ---
 
@@ -56,9 +48,9 @@ Everything must use **free tiers only** (no credit card).
 | Capability | Phase |
 | --- | --- |
 | Backend foundation (config, DB, health/ready) | **Phase 2 (done)** |
+| GitHub OAuth sign-in + sessions | **Phase 3 (done)** |
 | Publicly reachable web app | Later (deploy) |
-| GitHub OAuth sign-in | Phase 3+ |
-| Connect one owned repository | Later |
+| Connect one owned repository | Phase 4+ |
 | Webhook endpoint (issues + pull requests) | Later |
 | GitHub write-back (label / comment) | Later |
 | Slack notifications | Later |
@@ -169,45 +161,69 @@ Copy `.env.example` → `.env` and set at least:
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` |
 | `DATABASE_URL` | Postgres connection string | see above |
 | `AUTO_MIGRATE` | Apply SQL migrations on startup | `true` (default in development) |
+| `FRONTEND_URL` | Post-OAuth redirect + CORS origin | `http://localhost:5173` |
+| `GITHUB_CLIENT_ID` | OAuth App client ID | from GitHub |
+| `GITHUB_CLIENT_SECRET` | OAuth App client secret | from GitHub |
+| `GITHUB_OAUTH_REDIRECT_URL` | Must match OAuth App callback | `http://localhost:8080/auth/github/callback` |
+| `SESSION_SECRET` | ≥32 chars; cookies + token encryption | `openssl rand -hex 32` |
+| `COOKIE_SECURE` | Set true behind HTTPS | `false` locally |
+| `COOKIE_SAMESITE` | `Lax` (default), `Strict`, or `None` | `Lax` |
 
-Future placeholders (`GITHUB_*`, `SLACK_WEBHOOK_URL`, `SESSION_SECRET`, AI keys) are listed in `.env.example` but unused in Phase 2.
+Future placeholders (`GITHUB_WEBHOOK_SECRET`, `SLACK_WEBHOOK_URL`, AI keys) are listed in `.env.example` but unused in Phase 3.
+
+### GitHub OAuth App (local)
+
+1. Open [GitHub Developer Settings → OAuth Apps](https://github.com/settings/developers) → **New OAuth App**.
+2. **Application name:** GitActionFlow (local)
+3. **Homepage URL:** `http://localhost:5173`
+4. **Authorization callback URL:** `http://localhost:8080/auth/github/callback`
+5. Copy Client ID and generate a Client Secret into `.env` (never commit them).
+
+Scopes requested by the app: `read:user repo` (user identity + later repo automation). See [ADR-005](docs/decisions/ADR-005-sessions-and-token-encryption.md).
 
 ### Start the backend
 
 ```bash
 cd backend
+# load .env somehow, or export vars manually
 export DATABASE_URL='postgres://gitactionflow:gitactionflow@localhost:5432/gitactionflow?sslmode=disable'
 export APP_ENV=development APP_PORT=8080 LOG_LEVEL=info AUTO_MIGRATE=true
+export GITHUB_CLIENT_ID=... GITHUB_CLIENT_SECRET=...
+export GITHUB_OAUTH_REDIRECT_URL=http://localhost:8080/auth/github/callback
+export SESSION_SECRET="$(openssl rand -hex 32)"
+export FRONTEND_URL=http://localhost:5173
 go run ./cmd/server
 ```
 
-Or run everything in Compose:
+### Authentication flow (manual check)
 
 ```bash
-docker-compose up -d --build
+# 1) Start OAuth (opens GitHub in browser)
+xdg-open http://127.0.0.1:8080/auth/github   # or open the URL manually
+
+# 2) After GitHub redirects back, cookie is set. Then:
+curl -sS -c /tmp/gaf.jar -b /tmp/gaf.jar http://127.0.0.1:8080/api/me
+
+# 3) Logout
+curl -sS -c /tmp/gaf.jar -b /tmp/gaf.jar -X POST http://127.0.0.1:8080/auth/logout
 ```
+
+Unauthenticated `/api/me` returns `401` with the standard error envelope.
 
 ### Health and readiness
 
 ```bash
 curl http://127.0.0.1:8080/health
-# {"status":"ok"}
-
 curl http://127.0.0.1:8080/ready
-# {"status":"ready"}   # 503 if Postgres is down
 ```
 
 ### Migrations
 
-With `AUTO_MIGRATE=true` (default in development), migrations under `backend/migrations/` apply on startup.
-
-Current migration: `000001_foundation` creates a minimal `app_meta` table only. Full product schema comes later.
+With `AUTO_MIGRATE=true`, migrations under `backend/migrations/` apply on startup (`000001_foundation`, `000002_auth`).
 
 ### Frontend
 
-Not started yet. React + Vite will land in a later phase.
-
-Webhook testing against a local machine will need a public tunnel once webhooks are implemented.
+Full dashboard is not built yet. OAuth can be verified with a browser + cookie jar as above.
 
 ---
 
@@ -285,8 +301,8 @@ See [SECURITY.md](SECURITY.md).
 | Phase | Focus |
 | --- | --- |
 | **1** | Foundation, docs, conventions |
-| **2 (current)** | Backend scaffold, Postgres access, health, config |
-| **3** | Auth (GitHub OAuth + sessions) |
+| **2** | Backend scaffold, Postgres access, health, config |
+| **3 (current)** | Auth (GitHub OAuth + sessions) |
 | **4** | Repository connect + webhook registration |
 | **5** | Webhook ingest, persistence, idempotency |
 | **6** | Rule engine + GitHub / Slack actions |

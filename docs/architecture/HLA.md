@@ -1,6 +1,6 @@
 # High-Level Architecture (HLA)
 
-**Status:** Phase 1 — architecture agreed; runtime not implemented yet.
+**Status:** Phase 3 — auth implemented; repository/webhooks/rules still planned.
 
 **Project:** GitActionFlow — event-driven automation for Git repositories.
 
@@ -76,8 +76,8 @@ GitHub Repository
 | Component | Responsibility |
 | --- | --- |
 | React Web Dashboard | Login-gated UI: connected repo, rules, event/action history |
-| Auth module | GitHub OAuth start/callback, session establishment, CSRF `state` |
-| Repository management | Connect one owned repo; store webhook configuration metadata |
+| Auth module | GitHub OAuth start/callback, session establishment, CSRF `state` (**implemented Phase 3**) |
+| Repository management | Connect one owned repo; store webhook configuration metadata (**planned**) |
 | Dashboard APIs | Read models for events, actions, rules, connection status |
 | Webhook handler | Signature verify, validate, dedupe, durable persist |
 | Event processor | Load pending events, apply rules, enqueue/execute actions |
@@ -97,6 +97,36 @@ GitHub Repository
 | GitHub REST API | Labels, comments, repo metadata |
 | Slack Incoming Webhook | Channel notifications |
 | Optional LLM API | Stretch triage only |
+
+---
+
+## Authentication flow (Phase 3 — implemented)
+
+```text
+Browser
+   ↓
+GET /auth/github
+   ↓
+Generate OAuth state (random) → store hash in oauth_states (TTL, single-use)
+   ↓
+Redirect → GitHub authorize (scopes: read:user repo)
+   ↓
+GitHub callback → GET /auth/github/callback?code&state
+   ↓
+Validate + consume state
+   ↓
+Exchange code → access token (server-side only)
+   ↓
+GET GitHub /user → upsert users (token AES-GCM encrypted)
+   ↓
+Create sessions row (token hash) + Set-Cookie gaf_session (HttpOnly)
+   ↓
+Redirect → FRONTEND_URL
+```
+
+Protected APIs (e.g. `GET /api/me`) read the cookie, validate the session hash and expiry, and load the user. Logout deletes the session and clears the cookie.
+
+Details: [ADR-005](../decisions/ADR-005-sessions-and-token-encryption.md).
 
 ---
 

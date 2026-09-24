@@ -1,29 +1,34 @@
 # Backend
 
-Go HTTP API and event processor for GitActionFlow.
+Go HTTP API for GitActionFlow.
 
-**Phase 2 status:** Backend foundation is implemented (config, PostgreSQL, migrations, `/health`, `/ready`, graceful shutdown).
+**Phase 3 status:** Foundation + GitHub OAuth authentication.
 
 ## Requirements
 
-- Go **1.25+** (developed with Go 1.25.6)
+- Go **1.25+**
 - PostgreSQL 16 (local via Docker Compose)
+- GitHub OAuth App credentials
 
 ## Layout
 
 ```text
 backend/
-├── cmd/server/          # process entrypoint
+├── cmd/server/
 ├── internal/
-│   ├── app/             # startup / shutdown wiring
-│   ├── config/          # environment-based configuration
-│   ├── database/        # pgx pool + migrate helpers
+│   ├── app/
+│   ├── auth/           # cookies, crypto, context
+│   ├── config/
+│   ├── database/
+│   ├── githuboauth/    # GitHub OAuth HTTP client
 │   ├── http/
-│   │   ├── handlers/    # health / ready
-│   │   ├── response/    # consistent JSON errors
-│   │   └── router/      # Gin router
-│   └── logging/         # structured slog logger
-├── migrations/          # versioned SQL (up/down)
+│   │   ├── handlers/
+│   │   ├── middleware/
+│   │   ├── response/
+│   │   └── router/
+│   ├── logging/
+│   └── store/          # users, sessions, oauth_states
+├── migrations/
 ├── Dockerfile
 ├── go.mod
 └── go.sum
@@ -31,33 +36,26 @@ backend/
 
 ## Quick start
 
-From the repository root:
-
 ```bash
-# 1. Start Postgres
 docker-compose up -d postgres
-
-# 2. Configure env (or export variables)
-cp .env.example .env
-# ensure DATABASE_URL points at localhost:5432
-
-# 3. Run the API (auto-migrates when AUTO_MIGRATE=true)
+cp ../.env.example ../.env   # fill GitHub + SESSION_SECRET
 cd backend
-export $(grep -v '^#' ../.env | xargs)   # or set vars manually
+set -a && source ../.env && set +a
 go run ./cmd/server
 ```
 
-Verify:
+## Auth endpoints
 
-```bash
-curl http://127.0.0.1:8080/health
-curl http://127.0.0.1:8080/ready
-```
+| Method | Path | Auth |
+| --- | --- | --- |
+| GET | `/auth/github` | no |
+| GET | `/auth/github/callback` | no |
+| POST | `/auth/logout` | cookie optional (idempotent) |
+| GET | `/api/me` | session cookie required |
 
 ## Tests
 
 ```bash
-cd backend
 go test ./...
 gofmt -l .
 go vet ./...
@@ -65,6 +63,4 @@ go vet ./...
 
 ## Not implemented yet
 
-GitHub OAuth, webhooks, rules, Slack, AI, dashboard APIs, and React UI belong to later phases.
-
-See root `README.md` and `docs/architecture/HLA.md`.
+Repository connect, webhooks, rules, Slack, AI, dashboard APIs.

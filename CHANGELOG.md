@@ -8,6 +8,7 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions fol
 
 ### Added
 
+- Phase 3 GitHub OAuth authentication: state CSRF, sessions, `/api/me`, logout, encrypted token storage
 - Phase 2 backend foundation: Go/Gin server, config, pgx pool, migrations, `/health`, `/ready`, logging, graceful shutdown, Dockerfile, foundation tests
 - Phase 1 project foundation and documentation
 - Repository structure (`backend/`, `frontend/`, `docs/`)
@@ -18,4 +19,4 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions fol
 
 ### Not yet available
 
-- GitHub OAuth, webhooks, rules, Slack, AI, dashboard UI, production deploy
+- Repository connection, webhooks, rules, Slack, AI, dashboard UI, production deploy

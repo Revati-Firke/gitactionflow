@@ -88,7 +88,19 @@ Do not redesign the architecture without an ADR and explicit human agreement.
 - HTTP errors use `{ "error": { "code", "message" } }` (`internal/http/response`)
 - Keep handlers thin; inject dependencies (e.g. `Pinger` for readiness)
 - SQL migrations live in `backend/migrations/` (`*.up.sql` / `*.down.sql`)
-- Do not expand scope into OAuth/webhooks/Slack/AI until that phase begins
+- Do not expand scope into webhooks/Slack/AI/dashboard until that phase begins
+
+---
+
+## Authentication rules (Phase 3+)
+
+- Validate OAuth `state` (CSRF); states expire and are single-use
+- Use HttpOnly session cookies; never put GitHub tokens in localStorage/URL
+- Store session token hashes and encrypted GitHub access tokens only
+- Never log or return provider tokens, client secrets, or session secrets
+- Do not trust client-supplied user IDs when a session is available
+- Keep GitHub OAuth client code isolated (`internal/githuboauth`)
+- Test security-sensitive auth behavior with mocks (no real GitHub account required)
 
 ---
 

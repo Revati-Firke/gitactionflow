@@ -12,10 +12,15 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Revati-Firke/gitactionflow/backend/internal/auth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/config"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/database"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/githuboauth"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/http/handlers"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/http/middleware"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/http/router"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/logging"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/store"
 )
 
 // Run loads configuration, wires dependencies, serves HTTP, and shuts down gracefully.
@@ -33,6 +38,10 @@ func Run() error {
 		"log_level", redacted.LogLevel,
 		"auto_migrate", redacted.AutoMigrate,
 		"database_url", redacted.DatabaseURL,
+		"frontend_url", redacted.FrontendURL,
+		"oauth_redirect", redacted.GitHubOAuthRedirectURL,
+		"cookie_secure", redacted.CookieSecure,
+		"cookie_samesite", redacted.CookieSameSite,
 	)
 
 	ctx := context.Background()
@@ -52,9 +61,44 @@ func Run() error {
 	defer pool.Close()
 	log.Info("database pool ready")
 
+	users := store.NewUsers(pool)
+	sessions := store.NewSessions(pool)
+	states := store.NewOAuthStates(pool)
+	tokenKey := auth.DeriveKey(cfg.SessionSecret)
+
+	gh := githuboauth.New(githuboauth.Config{
+		ClientID:     cfg.GitHubClientID,
+		ClientSecret: cfg.GitHubClientSecret,
+		RedirectURL:  cfg.GitHubOAuthRedirectURL,
+	})
+
+	authHandler := &handlers.AuthHandler{
+		GitHub:   gh,
+		States:   states,
+		Users:    users,
+		Sessions: sessions,
+		TokenKey: tokenKey,
+		Cookie: auth.CookieOptions{
+			Secure:   cfg.CookieSecure,
+			SameSite: cfg.CookieSameSite,
+			TTL:      cfg.SessionTTL,
+		},
+		StateTTL:    cfg.OAuthStateTTL,
+		FrontendURL: cfg.FrontendURL,
+		Log:         log,
+	}
+
 	engine := router.New(router.Dependencies{
-		DB:     poolPinger{pool: pool},
-		AppEnv: cfg.AppEnv,
+		DB:          poolPinger{pool: pool},
+		AppEnv:      cfg.AppEnv,
+		FrontendURL: cfg.FrontendURL,
+		Auth:        authHandler,
+		AuthMW: middleware.AuthDeps{
+			Sessions: sessions,
+			Users:    users,
+			Log:      log,
+		},
+		Log: log,
 	})
 
 	srv := &http.Server{
@@ -96,7 +140,6 @@ func Run() error {
 	return nil
 }
 
-// poolPinger adapts *pgxpool.Pool to handlers.Pinger.
 type poolPinger struct {
 	pool *pgxpool.Pool
 }

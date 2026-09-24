@@ -1,65 +1,70 @@
 # Database
 
-**Status:** Phase 2 — connectivity, migrations, and a minimal foundation table. Full product schema is **not** created yet.
+**Status:** Phase 3 — foundation + authentication tables. Product tables (repos, rules, events, actions) are **not** created yet.
 
-PostgreSQL is the durable source of truth for GitActionFlow (ADR-002). Access from Go uses **pgx** (`pgxpool`). No ORM.
-
----
-
-## Connection approach
-
-- Configuration: `DATABASE_URL` (required).
-- Pool: `pgxpool` with modest defaults (max 10 connections, connect timeout 5s).
-- Operations are context-aware; the pool is closed on process shutdown.
-- `/ready` pings the pool to verify dependency health.
-
-Never expose `DATABASE_URL` or passwords in HTTP responses or logs (URLs are redacted in startup logs).
+PostgreSQL via **pgx** pool. Migrations: **golang-migrate** embedded from `backend/migrations/`.
 
 ---
 
-## Migration approach
+## Connection
 
-- Tool: [golang-migrate](https://github.com/golang-migrate/migrate)
-- Files: `backend/migrations/*.up.sql` / `*.down.sql`
-- Embedded into the binary via `backend/migrations` package (`embed`)
-- Applied on startup when `AUTO_MIGRATE=true` (default in `development` / `test`)
+- `DATABASE_URL` (required)
+- Pool closed on shutdown
+- `/ready` pings the pool
+- Credentials never returned in HTTP responses; URLs redacted in logs
 
-Version history is tracked in PostgreSQL table `schema_migrations` (managed by golang-migrate).
+---
 
-### Current migrations
+## Migrations
 
 | Version | Name | Purpose |
 | --- | --- | --- |
-| 000001 | foundation | Creates `app_meta` key/value table to prove migrate up/down works |
+| 000001 | foundation | `app_meta` smoke-test table |
+| 000002 | auth | `users`, `sessions`, `oauth_states` |
 
-`app_meta` is **not** the application domain model — only a Phase 2 smoke-test table.
+Applied on startup when `AUTO_MIGRATE=true`.
 
 ---
 
-## Future schema direction
+## Implemented tables
 
-Likely entities (unchanged from Phase 1 planning; still not implemented):
+### `users`
 
-| Entity | Purpose |
+| Column | Notes |
 | --- | --- |
-| users | GitHub identity |
-| sessions | Dashboard auth |
-| repositories | One connected repo per user (core) |
-| rules | Match → action configuration |
-| webhook_events | Durable deliveries; unique delivery ID |
-| actions | GitHub / Slack side-effect results |
-| failures/retries | Visible unhappy paths |
+| `id` | UUID PK |
+| `github_user_id` | Unique GitHub numeric ID |
+| `github_username` | Login |
+| `display_name` | Name or login fallback |
+| `avatar_url` | Avatar |
+| `github_access_token_encrypted` | AES-GCM ciphertext (never plaintext) |
+| `created_at` / `updated_at` | Timestamps |
 
-Exact columns and constraints will be added in the phase that needs them.
+### `sessions`
+
+| Column | Notes |
+| --- | --- |
+| `id` | UUID PK |
+| `user_id` | FK → users |
+| `token_hash` | SHA-256 of cookie token (unique) |
+| `expires_at` | Session expiry |
+| `created_at` | Created |
+
+### `oauth_states`
+
+| Column | Notes |
+| --- | --- |
+| `state_hash` | SHA-256 of OAuth state (PK) |
+| `expires_at` | Short TTL |
+| `consumed_at` | Set on single-use consume |
+| `created_at` | Created |
+
+### `app_meta`
+
+Phase 2 foundation table only.
 
 ---
 
-## Reliability mapping (planned)
+## Future schema (not implemented)
 
-```text
-Persist webhook_events (unique delivery id)
-  → process
-  → persist actions (success or failure)
-```
-
-Critical event state will live in PostgreSQL — not only in memory.
+`repositories`, `rules`, `webhook_events`, `actions` — later phases.
