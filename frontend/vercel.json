@@ -7,6 +7,10 @@
     {
       "source": "/auth/:path*",
       "destination": "https://gitactionflow-backend.onrender.com/auth/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
