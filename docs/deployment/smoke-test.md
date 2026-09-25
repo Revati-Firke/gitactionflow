@@ -7,7 +7,7 @@ Replace placeholders with your live URLs.
 ```text
 FRONTEND = https://<your-vercel-domain>
 BACKEND  = https://<your-render-domain>
-```l
+```
 
 ---
 

@@ -1,71 +1,81 @@
 # Security
 
-Security principles for GitActionFlow. **Phase 1 documents these rules; runtime enforcement lands in later phases.**
+Security model for the deployed GitActionFlow application (OAuth App + modular monolith).
+
+This document describes **implemented** controls. It is not a formal security certification.
 
 ## Reporting
 
-If you discover a vulnerability or a committed secret in this repository, do not open a public issue with the secret contents. Rotate credentials immediately and notify the repository owner.
+If you find a vulnerability or a committed secret, rotate credentials immediately and notify the repository owner. Do not open a public issue that includes secret values.
+
+## Authentication
+
+- GitHub OAuth App login with cryptographically random, single-use, TTL-bound `state` (CSRF for login).
+- Server-side sessions: raw session token in an **HttpOnly** cookie (`gaf_session`); only a hash is stored in PostgreSQL.
+- Production defaults: `Secure` + `SameSite=None` (cross-site capable). Preferred production hosting uses a **Vercel same-origin proxy** for `/api` and `/auth` so the cookie is first-party on the frontend host.
+- Logout deletes the session row and clears the cookie.
+- GitHub access tokens are encrypted at rest (`SESSION_SECRET`-derived key) and never returned to the browser or logged.
+
+## Authorization / isolation
+
+- Authenticated APIs derive the user from the session cookie — never from a client-supplied `user_id`.
+- Connected repository, rules, events, and actions are scoped to the current user’s connected repository.
+- One connected repository per user (DB unique constraint).
+- GitHub write actions use the connected repo’s owner/name from server-side state, not client-supplied repo identity.
+
+## CSRF (cookie APIs)
+
+- Mutating `/api/*` and `POST /auth/logout` reject `Origin` values that do not match configured `FRONTEND_URL` (normalized).
+- `POST /webhooks/github` is **not** Origin-gated; authenticity is HMAC signature based.
+- OAuth `GET` start/callback rely on OAuth `state`, not Origin CSRF middleware.
+
+## Webhooks
+
+- `X-Hub-Signature-256` HMAC-SHA256 over the **raw** body; compared with `hmac.Equal`.
+- Request body size bounded (`WEBHOOK_MAX_BODY_BYTES`).
+- `X-GitHub-Delivery` is the idempotency key (`UNIQUE` in PostgreSQL).
+- Unknown / unconnected repositories are ignored without side effects.
+- Webhook secret is never logged.
+
+## Idempotency
+
+- Events: unique delivery ID.
+- Actions: unique `(event_id, rule_id, action_type)` / idempotency key before external HTTP.
+- Duplicate deliveries must not create duplicate logical actions.
 
 ## Secrets
 
-Never expose the following to the frontend, client bundles, public repos, or logs:
+Never expose to frontend, bundles, API responses, or logs:
 
-- GitHub OAuth client secret
-- GitHub user / installation access tokens
-- GitHub webhook secrets
-- Slack Incoming Webhook URLs
-- AI API keys (if used)
-- Database credentials and connection strings with passwords
+- `GITHUB_CLIENT_SECRET`, GitHub access tokens, `GITHUB_WEBHOOK_SECRET`
+- `SESSION_SECRET`, `DATABASE_URL` passwords, `SLACK_WEBHOOK_URL`
+- `GEMINI_API_KEY` / `GROQ_API_KEY` / `AI_API_KEY`
 
-Rules:
+Config startup logging uses `Config.Redacted()`.
 
-- Use environment variables / host secret stores.
-- Commit only `.env.example` with placeholders.
-- Never commit `.env` or key files.
-- Redact sensitive values in structured logs.
+## Browser security headers
 
-## GitHub webhooks (planned)
+API responses set conservative headers including `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and a restrictive API `Content-Security-Policy`.
 
-Incoming webhooks must be verified using:
+## Rate limiting
 
-```text
-X-Hub-Signature-256
-```
+- Lightweight **per-process** in-memory limits on OAuth and `/api` routes.
+- GitHub webhooks are **not** rate-limited in-app (avoid dropping legitimate deliveries).
+- Not a distributed control on multi-instance hosts.
 
-- Compute HMAC-SHA256 over the raw request body with the webhook secret.
-- Compare signatures with a **constant-time** comparison.
-- Reject requests with missing or invalid signatures.
+## Optional AI
 
-## Replay and duplicate protection (planned)
+- Disabled by default (`AI_ENABLED=false`).
+- Model output is schema-validated and allowlisted; it cannot authorize or call arbitrary URLs.
+- AI failure skips enrichment; core label/comment/Slack config still applies when present.
 
-- Persist GitHub `X-GitHub-Delivery` (delivery ID) as an idempotency key.
-- A duplicate delivery must not cause duplicate GitHub actions or Slack notifications.
-- Side effects should be gated on unique delivery / action records in PostgreSQL.
+## Known limitations
 
-## OAuth (planned)
+- In-memory rate limits are per instance.
+- Exactly-once external delivery is not guaranteed; design minimizes duplicates (see ADR-008).
+- GitHub App installation auth is **not** used; OAuth App user tokens power API writes.
+- Automatic webhook registration on connect is **not** implemented (manual repo webhook).
 
-- Generate a cryptographically random `state` value.
-- Store it server-side (session or short-lived store) and validate on callback.
-- Reject callbacks with missing or mismatched `state` (CSRF protection).
-- Prefer HTTPS callback URLs on the public deployment.
+## CORS
 
-## Reliability and abuse resistance (planned)
-
-- Validate event payloads and event types before processing.
-- Persist first; then process — so brief downstream outages do not silently lose events.
-- Make failures visible (action status / failure records) and retryable.
-
-## Dependency and supply chain
-
-- Prefer well-maintained, minimal dependencies.
-- Do not vendor credentials in Docker images or CI logs.
-
-## What Phase 2 implements vs later
-
-Phase 2 implements:
-
-- Environment-based config validation
-- Redacted startup logging for `DATABASE_URL` and known secret fields
-- Safe `/ready` responses that do not leak database errors
-
-Signature verification, OAuth state validation, and delivery idempotency remain **not implemented** yet.
+- Reflects only the configured `FRONTEND_URL` origin with credentials — never `*`.

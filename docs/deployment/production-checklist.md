@@ -18,19 +18,20 @@
 ## Authentication
 
 - [ ] `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` set on Render
-- [ ] `GITHUB_OAUTH_REDIRECT_URL` = `https://<render>/auth/github/callback`
-- [ ] GitHub OAuth App homepage/callback match production
+- [ ] `GITHUB_OAUTH_REDIRECT_URL` = `https://gitactionflow.vercel.app/auth/github/callback` (Vercel proxy)
+- [ ] GitHub OAuth App homepage/callback match production Vercel URLs
 - [ ] `SESSION_SECRET` ≥ 32 chars
 - [ ] `COOKIE_SECURE=true`, `COOKIE_SAMESITE=None` (or production defaults)
-- [ ] `FRONTEND_URL` exact Vercel origin
+- [ ] `FRONTEND_URL` exact Vercel origin (no trailing slash)
 - [ ] Login and logout work from Vercel
 
 ## Frontend
 
-- [ ] `VITE_API_BASE_URL` = Render origin (build-time)
+- [ ] `VITE_API_BASE_URL` **unset** (same-origin `/api` + `/auth` proxy in `vercel.json`)
 - [ ] Production build succeeds
 - [ ] SPA routes (`/login`, `/dashboard`) work on refresh
 - [ ] Authenticated API calls send cookies (`credentials: 'include'`)
+- [ ] Vercel Deployment Protection / Require Log In is OFF for Production
 
 ## GitHub
 

@@ -4,30 +4,35 @@ Honest record of how AI tools were used on GitActionFlow.
 
 ## AI Tools Used
 
-- Cursor agent (Composer) for Phases 7–9 and deployment preparation (Neon/Render/Vercel)
+- Cursor agent (Composer) for Phases 7–10, deployment (Neon/Render/Vercel), and production hardening
 
 ## How AI Was Used
 
-- Phases 7–9: rules, actions, dashboard UI, history APIs.
-- Deployment prep: `PORT` preference for Render, production cookie defaults for cross-site SPA, `vercel.json`, Render/Neon docs, smoke checklist — **no claim of a live deploy without account access**.
+- Phases 7–9: rules, actions, dashboard UI, history APIs
+- Deployment: Render/Vercel/Neon wiring, cookie/CORS debugging, same-origin Vercel proxy
+- Phase 10: security middleware, optional AI abstraction, assignment matrix/verification docs
 
 ## Engineering Decisions Made by Me
 
-- Free stack: Neon Postgres + Render Go Docker + Vercel static SPA.
-- Prefer platform `PORT` over `APP_PORT` without breaking local defaults.
-- Production default `COOKIE_SAMESITE=None` + `COOKIE_SECURE=true` so Vercel can call Render with session cookies.
-- Migrations via existing `AUTO_MIGRATE` on startup (idempotent) rather than a new migrate binary.
+- Free stack: Neon + Render + Vercel
+- Prefer Vercel **same-origin proxy** for `/api` and `/auth` so session cookies work when third-party cookies are blocked (Incognito)
+- Keep GitHub **OAuth App** (no rushed GitHub App migration)
+- One repository per user (skip multi-repo stretch)
+- Optional AI behind `AI_ENABLED` with schema allowlisting; core path never depends on AI
+- CSRF Origin checks on mutating cookie APIs; do not Origin-gate GitHub webhooks
 
 ## Incorrect AI Suggestion / Hardest AI Mistake
 
-- Assuming Vite proxy alone works with OAuth cookies (cookie host mismatch). Production split hosting needs explicit API base + `SameSite=None`.
-- Claiming “deployed successfully” without dashboard access would be false — docs distinguish preparation vs verification.
+1. Assuming cross-site `SameSite=None` alone was enough for Vercel↔Render sessions in Incognito — browsers blocked third-party cookies (“Failed to fetch” / login loop).
+2. Removing the SPA fallback from `vercel.json` while adding API proxies caused `/login` and `/dashboard` **404**.
+3. Leaving `VITE_API_BASE_URL` set to the Render URL after the proxy shipped kept the login button on `onrender.com`, defeating first-party cookies.
 
 ## How I Corrected It
 
-- Documented cookie/CORS model; kept placeholders for live URLs; smoke tests marked NOT YET RUN until manually verified.
+- Proxied `/api` + `/auth` through Vercel; OAuth callback on the Vercel host; unset `VITE_API_BASE_URL` in production builds
+- Restored SPA `/(.*)` → `index.html` **after** API/auth rewrites
+- Documented the runbook in local `DEPLOYMENT_URLS.local.md` and updated deployment docs
 
-## What I Would Improve
+## Optional product AI (runtime)
 
-- Run the live smoke test on real Neon/Render/Vercel accounts
-- Optional AI stretch and automatic webhook registration if time allows
+When `AI_ENABLED=true` and a provider key is set, rules may set `use_ai` / `append_ai_summary` in action config. Failures skip enrichment; static config still runs.

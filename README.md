@@ -6,34 +6,35 @@ GitActionFlow is a take-home engineering assessment for an Abstrabit Software En
 
 ---
 
-## Current status (Phase 9 + deployment prep)
+## Current status (Phase 10)
 
-Core product (Phases 1–9) is implemented. **Public Neon + Render + Vercel deployment is prepared in-repo; live URLs require your cloud account setup** — see [docs/deployment/README.md](docs/deployment/README.md).
+Core product (Phases 1–9) is implemented and deployed on free tiers. Phase 10 adds production hardening (CSRF Origin, security headers, request IDs, timeouts, light rate limits), optional fail-open AI assistance, and assignment verification docs.
 
 **What exists now**
 
-- OAuth + authenticated dashboard UI
+- OAuth + authenticated dashboard (Vercel same-origin proxy to Render for cookies)
 - Connect / disconnect one GitHub repository
 - Configurable rules + GitHub label/comment + Slack actions
-- Durable webhooks, retries, event/action history APIs
-- Production deploy docs (Neon / Render / Vercel), SPA `vercel.json`, Render `PORT` + cross-site cookie defaults
+- Durable webhooks, retries, event/action history
+- Optional AI (`AI_ENABLED`) for summary / suggested labels (schema-validated)
+- Live demo URLs below
 
-**What is not implemented yet**
+**Intentionally not implemented**
 
-- AI stretch
+- Multi-repository product mode
+- GitHub App installation auth (OAuth App kept)
 - Automatic webhook registration on connect
-- Confirmed live production URL (manual deploy step)
 
 ---
 
 ## Live Application
 
 ```text
-Frontend: <LIVE_FRONTEND_URL>   # e.g. https://<project>.vercel.app
-Backend:  <LIVE_BACKEND_URL>    # e.g. https://<service>.onrender.com
+Frontend: https://gitactionflow.vercel.app
+Backend:  https://gitactionflow-backend.onrender.com
 ```
 
-Until you deploy, use local + ngrok for webhooks. After deploy, fill these in and follow [docs/deployment/smoke-test.md](docs/deployment/smoke-test.md).
+Assignment mapping: [docs/assignment/requirements-matrix.md](docs/assignment/requirements-matrix.md) · Verification: [docs/assignment/verification.md](docs/assignment/verification.md)
 
 ---
 
@@ -41,17 +42,14 @@ Until you deploy, use local + ngrok for webhooks. After deploy, fill these in an
 
 Full guide: **[docs/deployment/README.md](docs/deployment/README.md)** · Checklist: **[docs/deployment/production-checklist.md](docs/deployment/production-checklist.md)**
 
-1. Create **Neon** Postgres → copy `DATABASE_URL` (SSL).
-2. Deploy **Render** Docker service from `backend/Dockerfile` (context `backend`).
-3. Set Render env vars (`APP_ENV=production`, `DATABASE_URL`, `FRONTEND_URL`, GitHub OAuth/webhook secrets, `SESSION_SECRET`, `SLACK_WEBHOOK_URL`, `AUTO_MIGRATE=true`). Render provides `PORT`.
-4. Verify `GET /health` and `GET /ready`.
-5. Deploy **Vercel** from `frontend/` with `VITE_API_BASE_URL=https://<render-domain>`.
-6. Set Render `FRONTEND_URL` to the Vercel origin.
-7. Point GitHub OAuth callback to `https://<render>/auth/github/callback`.
-8. Point repo webhook to `https://<render>/webhooks/github` (Issues + PRs).
-9. Run the smoke test plan.
-
-Production cookies default to `Secure` + `SameSite=None` so the Vercel SPA can call the Render API with session cookies.
+1. Create **Neon** Postgres → `DATABASE_URL` (SSL).
+2. Deploy **Render** Docker from `backend/` (`APP_ENV=production`, `AUTO_MIGRATE=true`, secrets in dashboard).
+3. Verify `GET /health` and `GET /ready`.
+4. Deploy **Vercel** from `frontend/` — leave **`VITE_API_BASE_URL` unset** (same-origin `/api` + `/auth` proxy).
+5. Set Render `FRONTEND_URL=https://gitactionflow.vercel.app` and `GITHUB_OAUTH_REDIRECT_URL=https://gitactionflow.vercel.app/auth/github/callback`.
+6. GitHub OAuth App homepage = Vercel origin; callback = Vercel `/auth/github/callback`.
+7. Repo webhook → `https://gitactionflow-backend.onrender.com/webhooks/github` (Issues + PRs).
+8. Run [smoke-test.md](docs/deployment/smoke-test.md).
 
 ## Assignment purpose
 
