@@ -1,10 +1,20 @@
 import type { ApiError } from '../../types'
 
-// Must match the OAuth callback host (localhost, not 127.0.0.1).
-// Cookies are host-bound: a session set on localhost:8080 is sent only to that host.
-const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ??
-  'http://localhost:8080'
+// Local: default to backend on localhost (use localhost, not 127.0.0.1 — cookies are host-bound).
+// Production: default to same-origin "" so Vercel rewrites /api and /auth → Render, and the
+// session cookie is first-party on the Vercel host (works when third-party cookies are blocked).
+function resolveApiBase(): string {
+  const raw = import.meta.env.VITE_API_BASE_URL
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    return raw.replace(/\/$/, '')
+  }
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8080'
+  }
+  return ''
+}
+
+const API_BASE = resolveApiBase()
 
 export class ApiRequestError extends Error {
   code?: string

@@ -95,7 +95,7 @@ Render injects `PORT`. The app prefers `PORT` over `APP_PORT`.
 | `FRONTEND_URL` | `https://<your-vercel-domain>` (exact origin, no trailing slash) |
 | `GITHUB_CLIENT_ID` | OAuth App client ID |
 | `GITHUB_CLIENT_SECRET` | OAuth App secret |
-| `GITHUB_OAUTH_REDIRECT_URL` | `https://<your-render-domain>/auth/github/callback` |
+| `GITHUB_OAUTH_REDIRECT_URL` | `https://<your-vercel-domain>/auth/github/callback` (proxied to Render) |
 | `GITHUB_WEBHOOK_SECRET` | ≥ 16 chars; same as GitHub webhook secret |
 | `SESSION_SECRET` | ≥ 32 chars (`openssl rand -hex 32`) |
 | `SLACK_WEBHOOK_URL` | Incoming Webhook URL (server-only) |
@@ -117,9 +117,9 @@ curl -sS https://<your-render-domain>/ready
 # {"status":"ready"} when Neon is reachable
 ```
 
-### Why SameSite=None
+### Why SameSite=None (fallback)
 
-OAuth sets the session cookie on the **Render** host. The SPA on **Vercel** calls the API cross-site with `credentials: 'include'`. Browsers only send that cookie on cross-site XHR when `SameSite=None; Secure`.
+If the SPA called Render **cross-origin**, browsers need `SameSite=None; Secure` for the session cookie. Prefer the **same-origin Vercel proxy** below so cookies are first-party (works in Incognito when third-party cookies are blocked).
 
 ---
 
@@ -134,15 +134,26 @@ OAuth sets the session cookie on the **Render** host. The SPA on **Vercel** call
 | Install | `npm install` |
 | Build | `npm run build` |
 | Output | `dist` |
-| SPA routing | `frontend/vercel.json` rewrites to `index.html` |
+| Routing | `frontend/vercel.json` proxies `/api/*` and `/auth/*` to Render, then SPA fallback to `index.html` |
+
+### Same-origin API proxy (recommended)
+
+`frontend/vercel.json` rewrites browser calls:
+
+```text
+https://<vercel>/api/*   → https://<render>/api/*
+https://<vercel>/auth/*  → https://<render>/auth/*
+```
+
+OAuth callback and session cookie are then on the **Vercel** host. Webhooks stay on Render (GitHub → Render directly).
 
 ### Environment variables (Vercel)
 
 | Variable | Value |
 | --- | --- |
-| `VITE_API_BASE_URL` | `https://<your-render-domain>` (no trailing slash) |
+| `VITE_API_BASE_URL` | **Leave unset** in production (same-origin). Local dev defaults to `http://localhost:8080`. |
 
-Rebuild after changing env vars (Vite embeds them at build time).
+If `VITE_API_BASE_URL` still points at Render, remove it and **redeploy** so the build uses same-origin requests.
 
 **Never** set backend secrets in Vercel.
 
@@ -155,9 +166,9 @@ Update (or create) the OAuth App:
 | Field | Production value |
 | --- | --- |
 | Homepage URL | `https://<your-vercel-domain>` |
-| Authorization callback URL | `https://<your-render-domain>/auth/github/callback` |
+| Authorization callback URL | `https://<your-vercel-domain>/auth/github/callback` |
 
-Must match `GITHUB_OAUTH_REDIRECT_URL` exactly.
+Must match Render `GITHUB_OAUTH_REDIRECT_URL` exactly (same Vercel callback URL).
 
 You can keep a separate OAuth App for local development.
 
@@ -189,9 +200,9 @@ Create an Incoming Webhook in a free Slack workspace. Set `SLACK_WEBHOOK_URL` on
 1. Create Neon → copy `DATABASE_URL`
 2. Deploy Render backend with env vars (`AUTO_MIGRATE=true`) → note public URL
 3. Confirm `/health` and `/ready`
-4. Deploy Vercel frontend with `VITE_API_BASE_URL` → note public URL
-5. Set Render `FRONTEND_URL` to the Vercel origin; redeploy if needed
-6. Update GitHub OAuth callback + homepage
+4. Deploy Vercel frontend (**unset** `VITE_API_BASE_URL` so same-origin proxy is used) → note public URL
+5. Set Render `FRONTEND_URL` + `GITHUB_OAUTH_REDIRECT_URL` to the Vercel origin/callback; redeploy
+6. Update GitHub OAuth homepage + **callback on Vercel** (`/auth/github/callback`)
 7. Configure webhook on the demo repo
 8. Set Slack URL on Render
 9. Run [smoke-test.md](./smoke-test.md)

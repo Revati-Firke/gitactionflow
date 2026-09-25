@@ -59,3 +59,8 @@ coverage/
 # Misc
 *.bak
 *.tmp
+
+# Local deploy notes (URLs only — do not commit secrets)
+DEPLOYMENT_URLS.local.md
+*.local.md
+!docs/**/*.md
