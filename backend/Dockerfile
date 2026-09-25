@@ -1,6 +1,10 @@
 # Multi-stage Dockerfile for the GitActionFlow Go backend.
-# Build: docker build -t gitactionflow-backend ./backend
-# Run:   needs DATABASE_URL pointing at reachable Postgres.
+# Build from repo root:
+#   docker build -t gitactionflow-backend -f backend/Dockerfile backend
+# Or from backend/:
+#   docker build -t gitactionflow-backend .
+#
+# Render: connect this Dockerfile; set env vars; listen on $PORT.
 
 FROM golang:1.25-alpine AS builder
 
@@ -28,8 +32,8 @@ USER appuser
 
 EXPOSE 8080
 
+# PORT is injected by Render at runtime. APP_PORT remains a local/dev fallback.
 ENV APP_ENV=production \
-    APP_PORT=8080 \
     LOG_LEVEL=info \
     AUTO_MIGRATE=true
 

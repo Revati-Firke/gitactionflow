@@ -165,7 +165,31 @@ Do not redesign the architecture without an ADR and explicit human agreement.
 - Do not mark the parent event `processed` while required actions are pending or failed
 - Exactly-once external delivery is not guaranteed; design minimizes duplicates (see ADR-008)
 - Keep integrations behind small interfaces for tests; no real GitHub/Slack in unit tests
-- Do not implement dashboard or AI until those phases
+- Do not implement AI until that stretch phase
+
+---
+
+## Dashboard / frontend rules (Phase 9+)
+
+- React + TypeScript + Vite; keep API calls in `frontend/src/services/api/`
+- Session via HttpOnly cookie only — never store GitHub tokens in localStorage/sessionStorage/URL
+- Redirect unauthenticated users to login; protect dashboard UX but rely on backend 401s
+- Call backend with `credentials: 'include'`; use `localhost` consistently for OAuth cookies
+- Do not expose Slack webhook URL, session secrets, or access tokens in the UI
+- Event/action history APIs must omit raw webhook payloads
+- Prefer simple refresh buttons over WebSockets/polling for this assignment
+- Keep the UI professional and minimal — no charts, workflow builders, or multi-repo UX
+
+---
+
+## Deployment notes (production prep)
+
+- Free stack: Neon Postgres + Render (Go Docker) + Vercel (Vite static)
+- Prefer platform `PORT` when set; keep `APP_PORT` for local
+- Production cookies: `Secure` + `SameSite=None` for Vercel↔Render credentialed fetches
+- `FRONTEND_URL` must be the exact Vercel origin; CORS reflects only that origin
+- Migrations: existing `AUTO_MIGRATE` on startup (idempotent)
+- Do not claim a live deploy without verifying health/ready and the smoke test
 
 ---
 
@@ -200,8 +224,9 @@ Do not redesign the architecture without an ADR and explicit human agreement.
 
 ### Frontend
 
-- TypeScript strictness; clear separation of API client vs UI.
+- TypeScript strictness; clear separation of API client (`services/api`) vs UI.
 - Do not put secrets in client code or Vite env vars that are exposed to the browser.
+- Use `credentials: 'include'` for session cookies; never store provider tokens in the browser.
 
 ---
 

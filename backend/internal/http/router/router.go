@@ -17,6 +17,7 @@ type Dependencies struct {
 	Auth        *handlers.AuthHandler
 	Repos       *handlers.RepositoryHandler
 	Rules       *handlers.RulesHandler
+	Activity    *handlers.ActivityHandler
 	Webhooks    *handlers.GitHubWebhookHandler
 	AuthMW      middleware.AuthDeps
 	Log         *slog.Logger
@@ -62,6 +63,10 @@ func New(deps Dependencies) *gin.Engine {
 			api.GET("/rules/:id", deps.Rules.Get)
 			api.PUT("/rules/:id", deps.Rules.Update)
 			api.DELETE("/rules/:id", deps.Rules.Delete)
+		}
+		if deps.Activity != nil {
+			api.GET("/events", deps.Activity.ListEvents)
+			api.GET("/actions", deps.Activity.ListActions)
 		}
 	}
 

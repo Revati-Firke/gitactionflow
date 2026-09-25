@@ -23,6 +23,7 @@ func TestLoad_Defaults(t *testing.T) {
 	setAuthEnv(t)
 	t.Setenv("APP_ENV", "")
 	t.Setenv("APP_PORT", "")
+	t.Setenv("PORT", "")
 	t.Setenv("LOG_LEVEL", "")
 	t.Setenv("AUTO_MIGRATE", "")
 	t.Setenv("EVENT_WORKER_ENABLED", "")
@@ -30,6 +31,8 @@ func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("EVENT_MAX_RETRIES", "")
 	t.Setenv("EVENT_PROCESSING_LEASE", "")
 	t.Setenv("ACTION_MAX_RETRIES", "")
+	t.Setenv("COOKIE_SECURE", "")
+	t.Setenv("COOKIE_SAMESITE", "")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -47,6 +50,12 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Addr() != ":8080" {
 		t.Fatalf("Addr() = %q, want :8080", cfg.Addr())
 	}
+	if cfg.CookieSecure {
+		t.Fatal("CookieSecure should default false in development")
+	}
+	if !strings.EqualFold(cfg.CookieSameSite, "Lax") {
+		t.Fatalf("CookieSameSite = %q, want Lax", cfg.CookieSameSite)
+	}
 	if !cfg.EventWorkerEnabled {
 		t.Fatal("EventWorkerEnabled should default true")
 	}
@@ -61,6 +70,37 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.ActionMaxRetries != 3 {
 		t.Fatalf("action max retries = %d", cfg.ActionMaxRetries)
+	}
+}
+
+func TestLoad_PrefersPORTOverAPP_PORT(t *testing.T) {
+	setAuthEnv(t)
+	t.Setenv("APP_PORT", "8080")
+	t.Setenv("PORT", "10000")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AppPort != 10000 {
+		t.Fatalf("AppPort = %d, want 10000 from PORT", cfg.AppPort)
+	}
+}
+
+func TestLoad_ProductionCookieDefaults(t *testing.T) {
+	setAuthEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("COOKIE_SECURE", "")
+	t.Setenv("COOKIE_SAMESITE", "")
+	t.Setenv("AUTO_MIGRATE", "true") // override default false for prod
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.CookieSecure {
+		t.Fatal("CookieSecure should default true in production")
+	}
+	if !strings.EqualFold(cfg.CookieSameSite, "None") {
+		t.Fatalf("CookieSameSite = %q, want None in production", cfg.CookieSameSite)
 	}
 }
 
@@ -93,6 +133,7 @@ func TestLoad_MissingGitHubClientID(t *testing.T) {
 
 func TestLoad_InvalidPort(t *testing.T) {
 	setAuthEnv(t)
+	t.Setenv("PORT", "")
 	t.Setenv("APP_PORT", "not-a-number")
 	_, err := config.Load()
 	if err == nil {

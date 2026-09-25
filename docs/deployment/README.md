@@ -1,106 +1,213 @@
-# Deployment Direction
+# Deployment — Neon + Render + Vercel
 
-**Status:** Planned — **nothing is deployed** yet. Phase 2 documents backend runtime expectations for when deployment happens.
+**Status:** Deployment **preparation** is in the repository. Live URLs and production verification require your Neon / Render / Vercel / GitHub accounts (not claimable from this codebase alone).
 
-GitHub OAuth callbacks and webhooks require a **public HTTPS URL**. Localhost alone is insufficient for the live assignment demo.
+Assignment constraint: **free tiers only, no credit card**.
 
 ---
 
-## Intended topology
+## Architecture
 
 ```text
-React frontend
-      ↓
-Public deployment
-      ↓
-Go backend
-      ↓
-PostgreSQL
+User
+ │
+ ▼
+Vercel
+React Frontend (HTTPS)
+ │  cookie credentials + CORS
+ ▼
+Render
+Go Backend (HTTPS, $PORT)
+ │
+ ├── GitHub OAuth
+ ├── GitHub Webhooks
+ ├── GitHub API
+ └── Slack Incoming Webhook
+ │
+ ▼
+Neon
+PostgreSQL (SSL)
 ```
 
-| Piece | Role |
-| --- | --- |
-| React (Vite build) | Static assets + SPA (later) |
-| Go backend | API, OAuth, webhooks, processing |
-| PostgreSQL | Durable state |
+### Placeholder URLs
+
+```text
+Frontend:       https://<your-vercel-domain>
+Backend:        https://<your-render-domain>
+OAuth callback: https://<your-render-domain>/auth/github/callback
+GitHub webhook: https://<your-render-domain>/webhooks/github
+```
 
 ---
 
-## Expected free-tier services
+## 1. Neon (PostgreSQL)
 
-Assignment constraint: **no credit card**. Prefer providers with genuine free tiers. Always re-check current free-tier terms before locking in a choice — limits and eligibility change.
+1. Create a free Neon project.
+2. Copy the connection string (`DATABASE_URL`). Prefer the pooled URL Neon recommends for serverless/long-lived apps; include SSL (`sslmode=require` if not already present).
+3. Do **not** commit this URL.
 
-| Concern | Candidate options (verify before use) |
-| --- | --- |
-| Frontend | Vercel, Netlify, or Render static hosting |
-| Backend | Render (or similar free web service suitable for a long-running Go process) |
-| PostgreSQL | Neon or Supabase free Postgres |
-| Secrets | Host-provided environment variables |
-| Slack | Free Slack workspace + Incoming Webhook |
-| GitHub | Free OAuth App / webhooks / API |
+Migrations use the existing embedded golang-migrate files under `backend/migrations/`.
 
-If a service asks for a credit card for the tier you need, switch providers or tiers.
+### Migration process
 
----
+On Render, set:
 
-## Backend deployment considerations (Phase 2)
+```text
+AUTO_MIGRATE=true
+```
 
-### Environment variables
+On backend startup the process runs `database.MigrateUp(DATABASE_URL)` (idempotent: already-applied migrations are skipped).
 
-At minimum the host must provide:
+Alternatively, from a machine with network access to Neon:
 
-| Variable | Notes |
-| --- | --- |
-| `APP_ENV` | e.g. `production` |
-| `APP_PORT` | Port the process listens on (platform may inject `PORT` — map as needed when deploying) |
-| `DATABASE_URL` | Managed Postgres URL (TLS as required by provider) |
-| `LOG_LEVEL` | e.g. `info` |
-| `AUTO_MIGRATE` | Prefer explicit migrate control in production; default is `false` outside development/test |
+```bash
+cd backend
+export DATABASE_URL='postgres://…neon…/neondb?sslmode=require'
+# Temporary one-shot: run the server once with AUTO_MIGRATE=true, or use your usual migrate tooling against the same SQL files.
+```
 
-Future secrets (`GITHUB_*`, `SLACK_WEBHOOK_URL`, `SESSION_SECRET`, AI keys) must come from the host secret store — never from the image or repo.
+There is no separate migrate binary required — startup migrate is the supported production path for this assignment.
 
-### PostgreSQL connection
-
-- Use the provider connection string in `DATABASE_URL`.
-- Prefer TLS (`sslmode=require` or provider default) in production.
-- Do not expose Postgres on the public internet beyond the managed endpoint’s own controls.
-
-### Health and readiness
-
-| Endpoint | Use |
-| --- | --- |
-| `GET /health` | Liveness / process up |
-| `GET /ready` | Readiness / Postgres reachable |
-
-Configure the platform to:
-
-- Restart on failed liveness if supported
-- Route traffic only when readiness succeeds (when the platform supports it)
-
-### Graceful shutdown
-
-The server handles `SIGINT` / `SIGTERM`, stops accepting new requests, and closes the database pool. Prefer platforms that send SIGTERM on deploy/stop.
-
-### Container image
-
-`backend/Dockerfile` is a multi-stage build producing a minimal Alpine runtime image. Suitable for local Compose and future container hosts.
+Never print `DATABASE_URL` in logs (config uses `Redacted()`).
 
 ---
 
-## Local vs production
+## 2. Render (Go backend)
 
-| Environment | Notes |
+### Service settings
+
+| Setting | Value |
 | --- | --- |
-| Local | `docker-compose up -d postgres` (+ optional `backend`); `go run ./cmd/server` |
-| Production | Public HTTPS frontend + backend; managed Postgres; secrets only in host env |
+| Runtime | Docker |
+| Dockerfile path | `backend/Dockerfile` |
+| Docker context | `backend` |
+| Health check path | `/health` |
+| Plan | Free |
+
+Render injects `PORT`. The app prefers `PORT` over `APP_PORT`.
+
+### Required environment variables
+
+| Variable | Example / notes |
+| --- | --- |
+| `APP_ENV` | `production` |
+| `DATABASE_URL` | Neon connection string (SSL) |
+| `FRONTEND_URL` | `https://<your-vercel-domain>` (exact origin, no trailing slash) |
+| `GITHUB_CLIENT_ID` | OAuth App client ID |
+| `GITHUB_CLIENT_SECRET` | OAuth App secret |
+| `GITHUB_OAUTH_REDIRECT_URL` | `https://<your-render-domain>/auth/github/callback` |
+| `GITHUB_WEBHOOK_SECRET` | ≥ 16 chars; same as GitHub webhook secret |
+| `SESSION_SECRET` | ≥ 32 chars (`openssl rand -hex 32`) |
+| `SLACK_WEBHOOK_URL` | Incoming Webhook URL (server-only) |
+| `AUTO_MIGRATE` | `true` (recommended for free-tier first deploy) |
+| `COOKIE_SECURE` | `true` (default when `APP_ENV=production`) |
+| `COOKIE_SAMESITE` | `None` (default when `APP_ENV=production`; required for Vercel↔Render cookies) |
+| `EVENT_WORKER_ENABLED` | `true` |
+| `LOG_LEVEL` | `info` |
+
+Optional (defaults exist): `EVENT_MAX_RETRIES`, `EVENT_WORKER_POLL_INTERVAL`, `EVENT_PROCESSING_LEASE`, `ACTION_MAX_RETRIES`, `WEBHOOK_MAX_BODY_BYTES`, `SESSION_TTL`, `OAUTH_STATE_TTL`.
+
+### Verify after deploy
+
+```bash
+curl -sS https://<your-render-domain>/health
+# {"status":"ok"}
+
+curl -sS https://<your-render-domain>/ready
+# {"status":"ready"} when Neon is reachable
+```
+
+### Why SameSite=None
+
+OAuth sets the session cookie on the **Render** host. The SPA on **Vercel** calls the API cross-site with `credentials: 'include'`. Browsers only send that cookie on cross-site XHR when `SameSite=None; Secure`.
 
 ---
 
-## What is not done yet
+## 3. Vercel (React frontend)
 
-- Create cloud accounts
-- Provision remote databases
-- Deploy frontend or backend
-- Claim a live URL
+### Project settings
 
-Deployment steps and the live URL will be added to the root `README.md` when the deploy phase completes.
+| Setting | Value |
+| --- | --- |
+| Root directory | `frontend` |
+| Framework | Vite |
+| Install | `npm install` |
+| Build | `npm run build` |
+| Output | `dist` |
+| SPA routing | `frontend/vercel.json` rewrites to `index.html` |
+
+### Environment variables (Vercel)
+
+| Variable | Value |
+| --- | --- |
+| `VITE_API_BASE_URL` | `https://<your-render-domain>` (no trailing slash) |
+
+Rebuild after changing env vars (Vite embeds them at build time).
+
+**Never** set backend secrets in Vercel.
+
+---
+
+## 4. GitHub OAuth App
+
+Update (or create) the OAuth App:
+
+| Field | Production value |
+| --- | --- |
+| Homepage URL | `https://<your-vercel-domain>` |
+| Authorization callback URL | `https://<your-render-domain>/auth/github/callback` |
+
+Must match `GITHUB_OAUTH_REDIRECT_URL` exactly.
+
+You can keep a separate OAuth App for local development.
+
+---
+
+## 5. GitHub webhook (manual)
+
+On the connected repository → Settings → Webhooks:
+
+| Field | Value |
+| --- | --- |
+| Payload URL | `https://<your-render-domain>/webhooks/github` |
+| Content type | `application/json` |
+| Secret | same as `GITHUB_WEBHOOK_SECRET` |
+| Events | **Issues** and **Pull requests** |
+
+Do not put the secret in the frontend or README as a real value.
+
+---
+
+## 6. Slack
+
+Create an Incoming Webhook in a free Slack workspace. Set `SLACK_WEBHOOK_URL` on **Render only**.
+
+---
+
+## 7. Deploy order (recommended)
+
+1. Create Neon → copy `DATABASE_URL`
+2. Deploy Render backend with env vars (`AUTO_MIGRATE=true`) → note public URL
+3. Confirm `/health` and `/ready`
+4. Deploy Vercel frontend with `VITE_API_BASE_URL` → note public URL
+5. Set Render `FRONTEND_URL` to the Vercel origin; redeploy if needed
+6. Update GitHub OAuth callback + homepage
+7. Configure webhook on the demo repo
+8. Set Slack URL on Render
+9. Run [smoke-test.md](./smoke-test.md)
+
+---
+
+## Local development (unchanged)
+
+Docker Compose Postgres + `go run` + Vite remain the local path. See [LOCAL.md](../setup/LOCAL.md).
+
+Local cookies stay `COOKIE_SECURE=false`, `COOKIE_SAMESITE=Lax`.
+
+---
+
+## Related
+
+- [smoke-test.md](./smoke-test.md)
+- [production-checklist.md](./production-checklist.md)
+- Root [README.md](../../README.md)

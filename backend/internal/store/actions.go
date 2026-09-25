@@ -250,3 +250,55 @@ RETURNING ` + actionColumns
 	}
 	return pending, nil
 }
+
+// ActionWithRule is an action row plus optional rule name for dashboard views.
+type ActionWithRule struct {
+	Action
+	RuleName *string
+}
+
+// ListRecentByRepository returns newest actions for events belonging to a repository.
+func (s *Actions) ListRecentByRepository(ctx context.Context, repositoryID uuid.UUID, limit, offset int) ([]ActionWithRule, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	const q = `
+SELECT
+    a.id, a.event_id, a.rule_id, a.action_type, a.action_config, a.idempotency_key, a.status,
+    a.attempt_count, a.max_attempts, a.next_retry_at, a.last_error, a.started_at, a.completed_at,
+    a.failed_at, a.created_at, a.updated_at,
+    r.name AS rule_name
+FROM actions a
+INNER JOIN webhook_events e ON e.id = a.event_id
+LEFT JOIN rules r ON r.id = a.rule_id
+WHERE e.repository_id = $1
+ORDER BY a.created_at DESC, a.id DESC
+LIMIT $2 OFFSET $3`
+	rows, err := s.pool.Query(ctx, q, repositoryID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("list actions: %w", err)
+	}
+	defer rows.Close()
+	var out []ActionWithRule
+	for rows.Next() {
+		var a Action
+		var ruleName *string
+		err := rows.Scan(
+			&a.ID, &a.EventID, &a.RuleID, &a.ActionType, &a.ActionConfig, &a.IdempotencyKey, &a.Status,
+			&a.AttemptCount, &a.MaxAttempts, &a.NextRetryAt, &a.LastError, &a.StartedAt, &a.CompletedAt,
+			&a.FailedAt, &a.CreatedAt, &a.UpdatedAt,
+			&ruleName,
+		)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ActionWithRule{Action: a, RuleName: ruleName})
+	}
+	return out, rows.Err()
+}

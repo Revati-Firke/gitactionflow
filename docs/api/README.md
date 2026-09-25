@@ -1,6 +1,6 @@
 # API
 
-**Status:** Phase 7 — health, OAuth, repository connection, webhook ingestion, event processing, and rule CRUD/evaluation. GitHub/Slack action **execution** remains planned.
+**Status:** Phase 9 — health, OAuth, repository, webhooks, rules, action execution, and dashboard history APIs.
 
 Base URL: Go server root (default `http://localhost:8080`).
 
@@ -112,7 +112,7 @@ Public endpoint. Authenticated by **HMAC signature**, not session cookies.
 | Invalid JSON / missing repo id | 400 | structured error |
 | DB failure | **500** | so GitHub can retry |
 
-New rows are stored with status **`pending`**. A background worker claims them, evaluates rules (action intents only), then marks `processed` or retries/`failed`. No GitHub/Slack side effects yet.
+New rows are stored with status **`pending`**. A background worker claims them, evaluates rules, executes matched actions (GitHub/Slack), then marks `processed` or retries/`failed`.
 
 ---
 
@@ -155,6 +155,48 @@ Conditions within a rule are **AND**. Empty keyword/author are treated as unspec
 
 ---
 
+### Dashboard activity (Phase 9)
+
+Session required. Results are scoped to the authenticated user’s **connected** repository. Raw webhook payloads are never returned.
+
+#### `GET /api/events`
+
+Query: `page` (default 1), `limit` (default 20, max 100).
+
+**200**
+
+```json
+{
+  "events": [
+    {
+      "id": "…",
+      "event_type": "issues",
+      "action": "opened",
+      "status": "processed",
+      "delivery_id": "…",
+      "retry_count": 0,
+      "last_error": null,
+      "received_at": "…",
+      "processed_at": "…",
+      "failed_at": null
+    }
+  ],
+  "page": { "limit": 20, "offset": 0 }
+}
+```
+
+**404** `REPOSITORY_NOT_CONNECTED`
+
+#### `GET /api/actions`
+
+Same pagination. Includes optional `rule_name` when the rule still exists.
+
+**200** `{ "actions": [ { "id", "event_id", "rule_id", "rule_name", "action_type", "status", "attempt_count", "max_attempts", "last_error", "created_at", "completed_at", "failed_at" } ], "page": { … } }`
+
+**404** `REPOSITORY_NOT_CONNECTED`
+
+---
+
 ## Error envelope
 
 ```json
@@ -170,4 +212,4 @@ Conditions within a rule are **AND**. Empty keyword/author are treated as unspec
 
 ## Planned (not implemented)
 
-GitHub/Slack action execution, dashboard aggregations.
+Optional AI stretch; automatic webhook registration on connect.

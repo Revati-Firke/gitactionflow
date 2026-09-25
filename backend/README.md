@@ -2,7 +2,7 @@
 
 Go HTTP API for GitActionFlow.
 
-**Phase 8 status:** Foundation + OAuth + one-repo connection + webhook ingestion + event worker + configurable rules + GitHub/Slack action execution.
+**Phase 9 status:** OAuth, one-repo connection, webhooks, event worker, rules, GitHub/Slack actions, and dashboard history APIs.
 
 ## Requirements
 
@@ -10,8 +10,7 @@ Go HTTP API for GitActionFlow.
 - PostgreSQL 16
 - GitHub OAuth App (`read:user repo`)
 - `GITHUB_WEBHOOK_SECRET` (≥ 16 chars)
-- Event worker env (defaults OK): `EVENT_WORKER_ENABLED`, `EVENT_WORKER_POLL_INTERVAL`, `EVENT_MAX_RETRIES`, `EVENT_PROCESSING_LEASE`
-- Actions: `ACTION_MAX_RETRIES` (default 3), optional `SLACK_WEBHOOK_URL` (server-side only)
+- Event worker + action env (defaults OK): `EVENT_*`, `ACTION_MAX_RETRIES`, optional `SLACK_WEBHOOK_URL`
 
 ## Quick start
 
@@ -35,20 +34,19 @@ go run ./cmd/server
 | POST | `/auth/logout` | cookie optional |
 | GET | `/api/me` | session |
 | GET | `/api/github/repositories` | session |
-| GET | `/api/repository` | session |
-| POST | `/api/repository` | session |
-| DELETE | `/api/repository` | session |
+| GET/POST/DELETE | `/api/repository` | session |
 | GET/POST/PUT/DELETE | `/api/rules` | session |
+| GET | `/api/events` | session |
+| GET | `/api/actions` | session |
 | POST | `/webhooks/github` | HMAC signature |
 
 ## Tests
 
 ```bash
 go test ./...
-gofmt -l .
 go vet ./...
 ```
 
 ## Not implemented yet
 
-Dashboard UI, AI, automatic webhook registration on connect.
+AI, automatic webhook registration on connect.

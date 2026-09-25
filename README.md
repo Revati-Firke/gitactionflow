@@ -6,28 +6,52 @@ GitActionFlow is a take-home engineering assessment for an Abstrabit Software En
 
 ---
 
-## Current status (Phase 8)
+## Current status (Phase 9 + deployment prep)
 
-This repository is in **Phase 8: GitHub & Slack Action Execution**.
+Core product (Phases 1–9) is implemented. **Public Neon + Render + Vercel deployment is prepared in-repo; live URLs require your cloud account setup** — see [docs/deployment/README.md](docs/deployment/README.md).
 
 **What exists now**
 
-- OAuth + one connected repository + minimal UI
-- Signed webhook ingest + delivery-ID idempotency
-- Background worker with retries / failure handling
-- Configurable rules (event type, keyword, author, labels) via `/api/rules`
-- Rule evaluation produces action intents
-- Durable action records with idempotency keys
-- GitHub label / comment and Slack Incoming Webhook execution
+- OAuth + authenticated dashboard UI
+- Connect / disconnect one GitHub repository
+- Configurable rules + GitHub label/comment + Slack actions
+- Durable webhooks, retries, event/action history APIs
+- Production deploy docs (Neon / Render / Vercel), SPA `vercel.json`, Render `PORT` + cross-site cookie defaults
 
 **What is not implemented yet**
 
-- AI
-- Event history / rules dashboard UI
+- AI stretch
 - Automatic webhook registration on connect
+- Confirmed live production URL (manual deploy step)
 
-Webhook ingest returns quickly after durable persist. The worker validates events, evaluates rules, persists actions, calls GitHub/Slack outside DB transactions, and marks the event `processed` only when all actions complete.
 ---
+
+## Live Application
+
+```text
+Frontend: <LIVE_FRONTEND_URL>   # e.g. https://<project>.vercel.app
+Backend:  <LIVE_BACKEND_URL>    # e.g. https://<service>.onrender.com
+```
+
+Until you deploy, use local + ngrok for webhooks. After deploy, fill these in and follow [docs/deployment/smoke-test.md](docs/deployment/smoke-test.md).
+
+---
+
+## Production Deployment (summary)
+
+Full guide: **[docs/deployment/README.md](docs/deployment/README.md)** · Checklist: **[docs/deployment/production-checklist.md](docs/deployment/production-checklist.md)**
+
+1. Create **Neon** Postgres → copy `DATABASE_URL` (SSL).
+2. Deploy **Render** Docker service from `backend/Dockerfile` (context `backend`).
+3. Set Render env vars (`APP_ENV=production`, `DATABASE_URL`, `FRONTEND_URL`, GitHub OAuth/webhook secrets, `SESSION_SECRET`, `SLACK_WEBHOOK_URL`, `AUTO_MIGRATE=true`). Render provides `PORT`.
+4. Verify `GET /health` and `GET /ready`.
+5. Deploy **Vercel** from `frontend/` with `VITE_API_BASE_URL=https://<render-domain>`.
+6. Set Render `FRONTEND_URL` to the Vercel origin.
+7. Point GitHub OAuth callback to `https://<render>/auth/github/callback`.
+8. Point repo webhook to `https://<render>/webhooks/github` (Issues + PRs).
+9. Run the smoke test plan.
+
+Production cookies default to `Secure` + `SameSite=None` so the Vercel SPA can call the Render API with session cookies.
 
 ## Assignment purpose
 
@@ -54,7 +78,7 @@ Everything must use **free tiers only** (no credit card).
 | Durable event processing (worker, retries, failures) | **Phase 6 (done)** |
 | Configurable rule engine (action intents) | **Phase 7 (done)** |
 | GitHub / Slack action execution | **Phase 8 (done)** |
-| Authenticated dashboard (repo, rules, events, actions) | Later |
+| Authenticated dashboard (repo, rules, events, actions) | **Phase 9 (done)** |
 | Optional AI summary / label / priority (free provider) | Optional stretch |
 
 ---
@@ -109,7 +133,10 @@ GitHub Repository
           │          │
           └────┬─────┘
                ▼
-        Action Results → PostgreSQL → React Dashboard (later)
+        Action Results → PostgreSQL
+               ▲
+               │
+        React Dashboard (auth, repo, rules, events, actions)
 ```
 
 See [docs/architecture/HLA.md](docs/architecture/HLA.md) for the full description.

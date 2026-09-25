@@ -1,6 +1,6 @@
 # High-Level Architecture (HLA)
 
-**Status:** Phase 8 — auth, repo connection, webhook ingest, durable processing, rule evaluation, and GitHub/Slack action execution.
+**Status:** Phase 9 — full core path including authenticated React dashboard.
 
 **Project:** GitActionFlow — event-driven automation for Git repositories.
 
@@ -11,27 +11,34 @@ This document is the architecture source of truth. Do not redesign without an AD
 ## System overview
 
 ```text
-GitHub
-  ↓
-Webhook Handler
-  ↓
-PostgreSQL (pending)
-  ↓
-Event Worker
-  ↓
-Event Processor
-  ↓
-Rule Engine
-  ↓
-Action Intents
-  ↓
-Action Executor
-  ├── GitHub (label / comment)
-  └── Slack (Incoming Webhook)
-  ↓
-Action Results (completed / retry / failed)
-  ↓
-Event processed | retry | failed
+                React Dashboard
+                       │
+        ┌──────────────┼──────────────┐
+        ▼              ▼              ▼
+   Repository        Rules         Activity
+        │              │              │
+        └──────────────┼──────────────┘
+                       ▼
+                   Go Backend
+                       │
+        ┌──────────────┼──────────────┐
+        ▼              ▼              ▼
+      Auth          Webhooks       Worker
+                       │              │
+                       ▼              ▼
+                  PostgreSQL ←── Actions / Events
+                       │
+          ┌────────────┴────────────┐
+          ▼                         ▼
+     GitHub API                   Slack
+```
+
+Canonical processing flow:
+
+```text
+GitHub webhook → verify → dedupe → persist event
+ → worker → rules → action intents → executor (GitHub / Slack)
+ → action results → dashboard reads PostgreSQL via API
 ```
 
 ---
@@ -40,45 +47,27 @@ Event processed | retry | failed
 
 | Component | Responsibility |
 | --- | --- |
+| React dashboard | Login, repo, rules, event/action history (**Phase 9**) |
 | Auth | GitHub OAuth + sessions (**done**) |
 | Repository management | One connected repo (**done**) |
 | Webhook handler | Signature, dedupe, persist (**done**) |
-| Event worker | Claim / retry / fail (**done**) |
-| Event processor | Validate + extract context + rules + actions (**done**) |
-| Rule engine | Match rules → action intents (**done**) |
-| Action executor | Persist actions, call GitHub/Slack (**Phase 8**) |
-| Dashboard | Rules/events UI — **not yet** |
+| Event worker / processor | Claim, validate, rules, actions (**done**) |
+| Rule engine | Match → intents (**done**) |
+| Action executor | Persist + execute GitHub/Slack (**done**) |
 
 ---
 
-## Action execution (Phase 8)
+## Dashboard APIs (Phase 9)
 
-- Intents from the rule engine become durable `actions` rows **before** any external call
-- Idempotency key: `event_id:rule_id:action_type` (UNIQUE in PostgreSQL)
-- External HTTP is **outside** DB transactions
-- Event is marked `processed` only when all actions for that event are `completed`
-- Permanent action failures → event `failed`; retryable → event stays in retry lifecycle
-- See [ADR-008](../decisions/ADR-008-action-idempotency-and-failure-handling.md)
+Authenticated, scoped to the user’s connected repository:
 
----
+- `GET /api/events?page=&limit=` — summarized events (no raw payloads)
+- `GET /api/actions?page=&limit=` — action history with rule name when available
 
-## Rule matching (Phase 7)
-
-- Conditions: `event_type`, `keyword` (title/body), `author`, `required_labels`
-- Semantics: **AND** within a rule; unspecified fields ignored
-- Disabled rules skipped; multiple matches allowed (order: `created_at`, `id`)
-- CRUD: `GET/POST/PUT/DELETE /api/rules` (session auth, scoped to connected repo)
-- See [ADR-007](../decisions/ADR-007-rule-action-intent-separation.md)
-
----
-
-## Event processing (Phase 6)
-
-`pending` → `processing` → `processed` | retry | `failed`  
-Claim: `FOR UPDATE SKIP LOCKED`. Lease recovery. [ADR-006](../decisions/ADR-006-durable-event-processing.md).
+Existing: `/api/me`, repository routes, `/api/rules` CRUD.
 
 ---
 
 ## Related documents
 
-- [API](../api/README.md) · [Database](../database/README.md) · [ADRs](../decisions/README.md)
+- [API](../api/README.md) · [Database](../database/README.md) · [ADRs](../decisions/README.md) · [Local setup](../setup/LOCAL.md)

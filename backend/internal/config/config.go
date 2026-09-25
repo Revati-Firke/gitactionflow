@@ -51,7 +51,6 @@ func Load() (Config, error) {
 		GitHubWebhookSecret:    os.Getenv("GITHUB_WEBHOOK_SECRET"),
 		SlackWebhookURL:        os.Getenv("SLACK_WEBHOOK_URL"),
 		SessionSecret:          os.Getenv("SESSION_SECRET"),
-		CookieSameSite:         getEnv("COOKIE_SAMESITE", "Lax"),
 		AIAPIKey:               firstNonEmpty(os.Getenv("AI_API_KEY"), os.Getenv("GEMINI_API_KEY"), os.Getenv("GROQ_API_KEY")),
 	}
 
@@ -59,9 +58,11 @@ func Load() (Config, error) {
 		cfg.FrontendURL = "http://localhost:5173"
 	}
 
-	port, err := parsePort(getEnv("APP_PORT", "8080"))
+	// Render (and many PaaS) inject PORT. Prefer it over APP_PORT when set.
+	portRaw := firstNonEmpty(os.Getenv("PORT"), os.Getenv("APP_PORT"), "8080")
+	port, err := parsePort(portRaw)
 	if err != nil {
-		return Config{}, err
+		return Config{}, fmt.Errorf("PORT/APP_PORT: %w", err)
 	}
 	cfg.AppPort = port
 
@@ -72,14 +73,20 @@ func Load() (Config, error) {
 	cfg.AutoMigrate = autoMigrate
 
 	secureDefault := "false"
+	sameSiteDefault := "Lax"
 	if strings.EqualFold(cfg.AppEnv, "production") {
+		// Split hosting (Vercel SPA → Render API) requires cross-site cookies:
+		// SameSite=None + Secure. Local development keeps Lax + insecure HTTP.
 		secureDefault = "true"
+		sameSiteDefault = "None"
 	}
 	cookieSecure, err := parseBool(getEnv("COOKIE_SECURE", secureDefault))
 	if err != nil {
 		return Config{}, fmt.Errorf("COOKIE_SECURE: %w", err)
 	}
 	cfg.CookieSecure = cookieSecure
+
+	cfg.CookieSameSite = getEnv("COOKIE_SAMESITE", sameSiteDefault)
 
 	sessionTTL, err := parseDuration(getEnv("SESSION_TTL", "168h")) // 7 days
 	if err != nil {
@@ -226,7 +233,7 @@ func getEnv(key, fallback string) string {
 func parsePort(raw string) (int, error) {
 	port, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil {
-		return 0, fmt.Errorf("APP_PORT must be an integer: %w", err)
+		return 0, fmt.Errorf("port must be an integer: %w", err)
 	}
 	return port, nil
 }

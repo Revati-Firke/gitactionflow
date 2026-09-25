@@ -336,3 +336,36 @@ RETURNING ` + webhookEventColumns
 	}
 	return e, nil
 }
+
+// ListRecentByRepository returns newest events for a connected repository (bounded).
+func (s *WebhookEvents) ListRecentByRepository(ctx context.Context, repositoryID uuid.UUID, limit, offset int) ([]WebhookEvent, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	const q = `
+SELECT ` + webhookEventColumns + `
+FROM webhook_events
+WHERE repository_id = $1
+ORDER BY received_at DESC, id DESC
+LIMIT $2 OFFSET $3`
+	rows, err := s.pool.Query(ctx, q, repositoryID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("list webhook events: %w", err)
+	}
+	defer rows.Close()
+	var out []WebhookEvent
+	for rows.Next() {
+		e, err := scanWebhookEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}

@@ -125,6 +125,12 @@ func Run() error {
 		Service: ruleService,
 		Log:     log,
 	}
+	activityHandler := &handlers.ActivityHandler{
+		Repos:   repos,
+		Events:  webhookEvents,
+		Actions: actionStore,
+		Log:     log,
+	}
 
 	webhookHandler := &handlers.GitHubWebhookHandler{
 		Service: &webhook.Service{
@@ -144,6 +150,7 @@ func Run() error {
 		Auth:        authHandler,
 		Repos:       repoHandler,
 		Rules:       rulesHandler,
+		Activity:    activityHandler,
 		Webhooks:    webhookHandler,
 		AuthMW: middleware.AuthDeps{
 			Sessions: sessions,
