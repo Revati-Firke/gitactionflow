@@ -1,4 +1,4 @@
-# Local setup & test (through Phase 9)
+# Local setup & test
 
 OAuth, one connected repo, webhooks, rule/action execution, and the React dashboard.
 
@@ -43,6 +43,7 @@ Optional: set `SLACK_WEBHOOK_URL` for Slack actions.
 
 ---
 
-## Not included yet
+## Out of local scope (by design)
 
-AI, automatic webhook registration on connect.
+- Automatic webhook registration on connect (configure the webhook manually)
+- Optional AI (`AI_ENABLED`) — not required for the core path

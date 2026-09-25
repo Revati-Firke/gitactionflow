@@ -1,7 +1,5 @@
 # GitHub Actions workflows
 
-**Phase 1:** No CI workflows yet.
+No CI workflows in this repo yet. Optional later: lint/test/build for `backend/` and `frontend/`.
 
-Planned later (optional for the assignment): lint, test, and build checks for `backend/` and `frontend/`.
-
-Do not add paid or card-required CI features.
+Keep any CI free-tier only—no card-required features.

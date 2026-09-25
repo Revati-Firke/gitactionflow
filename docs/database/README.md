@@ -1,6 +1,6 @@
 # Database
 
-**Status:** Phase 8 — includes configurable `rules` and durable `actions`.
+**Status:** Current — users, repositories, webhook events, rules, and durable actions.
 
 PostgreSQL via **pgx**. Migrations via **golang-migrate** (`backend/migrations/`).
 

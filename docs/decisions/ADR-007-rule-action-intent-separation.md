@@ -1,21 +1,20 @@
 # ADR-007 — Rule Evaluation vs Action Execution
 
 **Status:** Accepted  
-**Date:** 2026-09-24  
-**Phase:** 7
+**Date:** 2026-09-24
 
 ## Context
 
-GitActionFlow must apply configurable rules to GitHub events, then later call GitHub/Slack. Mixing “match” and “execute” in one step makes retries from Phase 6 dangerous (duplicate labels/comments/Slack messages) and hard to test.
+Configurable rules must decide what to do on a GitHub event, then GitHub/Slack must be called. Mixing “match” and “execute” in one step makes worker retries dangerous (duplicate labels/comments/Slack messages) and hard to test.
 
 ## Decision
 
 1. The **rule engine** only evaluates conditions and returns **action intents** (rule id, action type, config, event id).
 2. **No GitHub, Slack, or AI calls** happen during rule evaluation.
-3. Phase 8 (and later) will consume intents and perform side effects with their own idempotency.
+3. The **action executor** (`internal/actions`) consumes intents and performs side effects with its own idempotency (ADR-008).
 
 ## Consequences
 
 - Rule matching is deterministic and unit-testable without network.
-- Retries re-run matching safely in Phase 7 (no external effects yet).
-- Clear package boundary: `internal/rules` vs future action executors.
+- Retries can re-run matching safely; duplicate side effects are constrained by action idempotency keys.
+- Clear package boundary: `internal/rules` vs `internal/actions`.

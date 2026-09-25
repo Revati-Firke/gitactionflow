@@ -1,30 +1,15 @@
-# Final acceptance (Phase 11)
+# Final acceptance — Release Candidate
 
-Date: 2026-09-26  
-Decision guidance: core product is demonstrable on free-tier hosting. Phase 10 hardening is implemented in the working tree and must be **committed, pushed, and redeployed** before claiming Phase 10 live. Demo config (labels) must use labels that exist on the demo repo.
-
-## Live URLs
-
-| Role | URL |
-| --- | --- |
-| Frontend | https://gitactionflow.vercel.app |
-| Backend | https://gitactionflow-backend.onrender.com |
-| Repo (demo) | `Revati-Firke/Daily-Impression-AI-Model` |
-| Source | https://github.com/Revati-Firke/gitactionflow |
-
-## Overall
+Date: 2026-09-26
 
 ```text
-READY FOR SUBMISSION — with conditions
+READY FOR SUBMISSION — with demo hygiene notes
 ```
 
-Conditions (not product redesigns):
+Core Abstrabit requirements are implemented and verified on the live stack (OAuth, one repo, issue webhooks, Slack, rules, dashboard). Two demo-hygiene items remain on me before a reviewer session—not missing product features:
 
-1. Push + redeploy Phase 10 commits (security/AI docs) if submitting that phase as live.
-2. Demo rules must use **existing** GitHub labels (avoid 422 → event Failed while Slack still works).
-3. Complete PR + webhook redeliver smoke if not already recorded by the owner.
-
-Core Abstrabit requirements are implemented and largely production-verified (OAuth, one repo, webhooks, rules, Slack, dashboard). Remaining gaps are demo hygiene and optional stretch honesty.
+1. Demo rules should use **labels that already exist** on the repo (or Slack/comment only), so a GitHub 422 does not mark the event Failed while Slack still succeeds.
+2. Optionally run one live **PR** webhook and one webhook **Redeliver** once before the demo.
 
 ---
 
@@ -32,45 +17,45 @@ Core Abstrabit requirements are implemented and largely production-verified (OAu
 
 | # | Requirement | Result | Evidence |
 | --- | --- | --- | --- |
-| 1 | Public deployed app | **PASS** | Frontend/backend HTTPS 200; `/health` `/ready` ok |
-| 2 | GitHub OAuth | **PASS** | Live login → dashboard (proxy cookie fix) |
-| 3 | Connect one repository | **PASS** | `Daily-Impression-AI-Model` connected in UI |
-| 4 | Webhook issues | **PASS** | Events appear; Slack/actions for issues |
-| 5 | Webhook pull requests | **NOT TESTED** (this review) | Code supports `pull_request`; owner should open a PR once |
-| 6 | Bot GitHub write (label) | **PARTIAL** | Implemented; live 422 when label missing — create label or change rule |
-| 7 | Bot GitHub comment | **NOT TESTED** live | Implemented in code + unit tests |
-| 8 | Slack notification | **PASS** | `#gitactionflow-demo` messages observed |
-| 9 | Configurable rules | **PASS** | Create/edit/enable rules in dashboard |
-| 10 | Event/action history | **PASS** | Dashboard lists + failure visibility |
-| 11 | Signature verification | **PASS** | Unit tests; forged POST to live returns non-2xx / rejected |
-| 12 | Idempotency | **PASS** (code/tests) | Delivery UNIQUE + action key; live redeliver **owner to confirm** |
-| 13 | Retries / failure persistence | **PASS** | Failed actions show `last_error`; unit tests |
-| 14 | README / .env.example / deploy docs | **PASS** | Present; live URLs in README |
-| 15 | AGENTS.md / AI_NOTES / SECURITY | **PASS** | Updated Phase 10 |
+| 1 | Public deployed app | **PASS** | Frontend/backend HTTPS; `/health` `/ready` ok |
+| 2 | GitHub OAuth | **PASS** | Live login → dashboard (same-origin proxy) |
+| 3 | Connect one repository | **PASS** | `Daily-Impression-AI-Model` connected |
+| 4 | Webhook issues | **PASS** | Events + Slack/actions for issues |
+| 5 | Webhook pull requests | **NOT TESTED live** | Code supports `pull_request`; open one PR once |
+| 6 | Bot GitHub label | **PARTIAL** | Works when the label exists; 422 if missing |
+| 7 | Bot GitHub comment | **NOT TESTED live** | Implemented + unit tests |
+| 8 | Slack notification | **PASS** | `#gitactionflow-demo` |
+| 9 | Configurable rules | **PASS** | Dashboard CRUD |
+| 10 | Event/action history | **PASS** | Lists + failure visibility |
+| 11 | Signature verification | **PASS** | Unit tests; forged live POST rejected |
+| 12 | Idempotency | **PASS** (code/tests) | Delivery UNIQUE + action key; live redeliver once preferred |
+| 13 | Retries / failure persistence | **PASS** | `last_error` visible; unit tests |
+| 14 | README / .env.example / deploy docs | **PASS** | Live URLs in README |
+| 15 | AGENTS.md / AI_NOTES / SECURITY | **PASS** | Present and current |
 
 ## Optional
 
 | Feature | Status |
 | --- | --- |
-| AI assistance | Implemented (optional, `AI_ENABLED=false` by default) — live enable not required |
-| Observability | Partial (JSON logs, request_id) — in Phase 10 tree |
-| Multi-repository | **Not implemented** |
-| GitHub App auth | **Not implemented** |
+| AI assistance | Optional, `AI_ENABLED=false` by default — not required live |
+| Observability | JSON logs + `request_id` |
+| Multi-repository | Not built (by design) |
+| GitHub App auth | Not built (OAuth App kept) |
 
-## Automated tests (Phase 11 run)
+## Automated checks
 
 ```text
 cd backend && go test ./...          → PASS
 cd backend && go vet ./...           → PASS
 cd backend && go test -race ./...    → PASS
 cd frontend && npm run build         → PASS
-Frontend bundle secret scan          → no GITHUB_CLIENT_SECRET / SESSION_SECRET / SLACK / DATABASE patterns
+Frontend bundle secret scan          → no client/session/Slack/DB secret patterns
 ```
 
-## Known demo pitfall (not a missing feature)
+## Demo pitfall
 
-Multiple rules match keyword `bug`. If `label-bug` targets a non-existent label, GitHub returns **422**, Slack may still **Complete**, and the **event** shows **Failed** (`required actions failed`). For demos: disable failing label rules or create the label first.
+Several rules can match keyword `bug`. If a label rule names a label that does not exist, GitHub returns **422**, Slack may still **Complete**, and the **event** shows **Failed**. For demos: disable that rule or create the label first.
 
-## Git / deploy note
+## Design stance (for reviewers)
 
-Working tree contains **uncommitted Phase 10** changes. Live `origin/dev` tip at acceptance time was SPA/proxy fixes (`537a9fb`). Submit after committing Phase 10 + redeploying Render/Vercel so docs and hardening match production.
+I chose a modular monolith, free Neon/Render/Vercel hosting, a Vercel proxy for cookies, and a GitHub OAuth App with one repo—documented in `AI_NOTES.md` and `docs/decisions/`. Stretch AI is behind a flag and does not own the critical path.

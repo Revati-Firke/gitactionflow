@@ -1,6 +1,6 @@
 # API
 
-**Status:** Phase 9 — health, OAuth, repository, webhooks, rules, action execution, and dashboard history APIs.
+**Status:** Current — health, OAuth, repository, webhooks, rules, actions, dashboard history.
 
 Base URL: Go server root (default `http://localhost:8080`).
 
@@ -24,9 +24,9 @@ Base URL: Go server root (default `http://localhost:8080`).
 | POST | `/auth/logout` | cookie optional |
 | GET | `/api/me` | session required |
 
-See Phase 3 docs in git history for OAuth details. `/api/me` never returns tokens.
+`/api/me` never returns tokens. OAuth details: [ADR-005](../decisions/ADR-005-sessions-and-token-encryption.md).
 
-### Repository management (Phase 4)
+### Repository management
 
 All routes require a valid session cookie. User identity comes from the session — never from the request body.
 
@@ -81,7 +81,7 @@ Backend re-fetches the repo from GitHub and requires **admin** permission. Clien
 
 Disconnects the local connection (idempotent). Does **not** delete GitHub webhooks automatically.
 
-### Webhooks (Phase 5)
+### Webhooks
 
 #### `POST /webhooks/github`
 
@@ -116,7 +116,7 @@ New rows are stored with status **`pending`**. A background worker claims them, 
 
 ---
 
-### Rules (Phase 7)
+### Rules
 
 All routes require a session cookie. Repository is derived from the authenticated user's connected repo (never from the client).
 
@@ -155,7 +155,7 @@ Conditions within a rule are **AND**. Empty keyword/author are treated as unspec
 
 ---
 
-### Dashboard activity (Phase 9)
+### Dashboard activity
 
 Session required. Results are scoped to the authenticated user’s **connected** repository. Raw webhook payloads are never returned.
 

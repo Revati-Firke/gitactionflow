@@ -1,10 +1,10 @@
 # High-Level Architecture (HLA)
 
-**Status:** Phase 9 — full core path including authenticated React dashboard.
+**Status:** Current — core product path including authenticated dashboard.
 
 **Project:** GitActionFlow — event-driven automation for Git repositories.
 
-This document is the architecture source of truth. Do not redesign without an ADR and explicit agreement.
+Architecture source of truth. Do not redesign without an ADR and explicit agreement.
 
 ---
 
@@ -33,7 +33,7 @@ This document is the architecture source of truth. Do not redesign without an AD
      GitHub API                   Slack
 ```
 
-Canonical processing flow:
+Canonical flow:
 
 ```text
 GitHub webhook → verify → dedupe → persist event
@@ -47,24 +47,30 @@ GitHub webhook → verify → dedupe → persist event
 
 | Component | Responsibility |
 | --- | --- |
-| React dashboard | Login, repo, rules, event/action history (**Phase 9**) |
-| Auth | GitHub OAuth + sessions (**done**) |
-| Repository management | One connected repo (**done**) |
-| Webhook handler | Signature, dedupe, persist (**done**) |
-| Event worker / processor | Claim, validate, rules, actions (**done**) |
-| Rule engine | Match → intents (**done**) |
-| Action executor | Persist + execute GitHub/Slack (**done**) |
+| React dashboard | Login, repo, rules, event/action history |
+| Auth | GitHub OAuth + sessions |
+| Repository management | One connected repo |
+| Webhook handler | Signature, dedupe, persist |
+| Event worker | Claim, validate, rules, actions |
+| Rule engine | Match → intents |
+| Action executor | Persist + execute GitHub/Slack |
 
 ---
 
-## Dashboard APIs (Phase 9)
+## Dashboard APIs
 
 Authenticated, scoped to the user’s connected repository:
 
 - `GET /api/events?page=&limit=` — summarized events (no raw payloads)
 - `GET /api/actions?page=&limit=` — action history with rule name when available
 
-Existing: `/api/me`, repository routes, `/api/rules` CRUD.
+Also: `/api/me`, repository routes, `/api/rules` CRUD.
+
+---
+
+## Why this shape
+
+I kept a **modular monolith** so deploy and debugging stay simple on free tiers. Postgres is both store and queue—no Redis/Kafka for the assignment. Rules emit intents; a separate executor owns side effects and idempotency. Details: `docs/decisions/`.
 
 ---
 

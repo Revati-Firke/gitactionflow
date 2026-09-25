@@ -1,56 +1,35 @@
 # Contributing to GitActionFlow
 
-Thank you for working on this project. GitActionFlow is a take-home assignment codebase; keep changes aligned with the assignment scope described in `README.md` and `AGENTS.md`.
+This is a take-home assignment codebase. Stay inside the scope in `README.md` and `AGENTS.md`.
 
 ## Before you start
 
-1. Read `README.md` and `AGENTS.md`.
-2. Confirm which phase you are implementing.
-3. Prefer small, focused changes.
-4. Do not add out-of-scope products or infrastructure.
+1. Read `README.md`, `AGENTS.md`, and the ADRs under `docs/decisions/`.
+2. Prefer small, focused changes over rewrites.
+3. Do not add out-of-scope products or infrastructure without an explicit decision.
 
-## Development workflow (planned)
+## Local workflow
 
-Exact tooling land in later phases. Expected flow:
-
-1. Copy `.env.example` to `.env` and configure locally.
-2. Start PostgreSQL with `docker compose up -d`.
-3. Run backend and frontend from their directories once scaffolds exist.
+1. Copy `.env.example` → `.env` (placeholders only; never commit real secrets).
+2. `docker compose up -d` for Postgres.
+3. Run backend (`backend/`) and frontend (`frontend/`) as in `docs/setup/LOCAL.md`.
 4. Add or update tests for behavior you change.
-5. Update docs if architecture or behavior changes.
+5. Update docs when architecture or behavior changes.
 
-## Commit messages
+## Commits
 
-Use Conventional Commits:
+Conventional Commits: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `security`.
 
-```text
-feat:
-fix:
-docs:
-test:
-refactor:
-chore:
-security:
-```
+Avoid vague messages (`update`, `changes`, `final`, `stuff`).
 
-Example:
+## Review focus
 
-```text
-docs: add initial project architecture
-```
-
-Do not use vague messages such as `update`, `changes`, `final`, or `stuff`.
-
-## Pull requests / review focus
-
-When reviewing or preparing changes, check:
-
-- Assignment scope not expanded without reason
+- Scope stays assignment-sized
 - Secrets not committed or logged
-- Docs distinguish planned vs implemented
+- Docs match what actually runs
 - Errors handled explicitly
-- Tests cover important security/reliability behavior when applicable
+- Security/reliability paths have tests where it matters
 
 ## Security
 
-See `SECURITY.md`. Never commit real credentials. Report suspected secret leaks immediately and rotate credentials.
+See `SECURITY.md`. Rotate credentials immediately if anything sensitive leaks.

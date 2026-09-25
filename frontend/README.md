@@ -1,8 +1,6 @@
 # Frontend
 
-React + TypeScript + Vite dashboard for GitActionFlow.
-
-**Phase 9:** Authenticated dashboard — repository connect/disconnect, rules CRUD, event and action history.
+React + TypeScript + Vite dashboard: repository connect/disconnect, rules CRUD, event and action history.
 
 ## Run
 

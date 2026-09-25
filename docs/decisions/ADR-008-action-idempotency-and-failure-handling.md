@@ -1,8 +1,7 @@
 # ADR-008 — Action Idempotency and Failure Handling
 
 **Status:** Accepted  
-**Date:** 2026-09-24  
-**Phase:** 8
+**Date:** 2026-09-24
 
 ## Context
 
@@ -22,12 +21,12 @@ Exactly-once delivery to external APIs cannot be guaranteed with a database alon
 2. **Reuse on conflict.** Concurrent or replayed creates hit the UNIQUE constraint and reuse the existing row.
 3. **Execute outside transactions.** Claim → HTTP → update status in separate short DB operations.
 4. **Classify errors.** Transient (network, 429, 5xx) → schedule retry with shared exponential backoff. Permanent (401/403/404/422, bad config, Slack not configured) → `failed` immediately.
-5. **Parent event coupling.** Processor returns incomplete/failed when actions are not all `completed`. Worker marks the event processed only on full success; otherwise retry or permanent fail per existing Phase 6 rules.
+5. **Parent event coupling.** Processor returns incomplete/failed when actions are not all `completed`. Worker marks the event processed only on full success; otherwise retry or permanent fail per ADR-006.
 6. **Secrets.** Slack webhook URL and GitHub tokens come only from server config / encrypted user storage — never from rule config, logs, or API responses.
 
 ## Consequences
 
-- Duplicate webhook deliveries still create one event (Phase 5) and at most one action per intent key.
+- Duplicate webhook deliveries still create one event (delivery ID unique) and at most one action per intent key.
 - Re-applying the same GitHub label is generally safe; comments/Slack may duplicate only in the crash-after-success window.
-- Failed action rows are retained for troubleshooting (dashboard later).
+- Failed action rows are retained for troubleshooting on the dashboard.
 - `ACTION_MAX_RETRIES` bounds action attempts independently of `EVENT_MAX_RETRIES`.

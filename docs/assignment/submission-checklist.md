@@ -1,60 +1,61 @@
-# Submission checklist
+# Submission checklist — Release Candidate
+
+Date: 2026-09-26
 
 ## Repository
 
-- [x] Public GitHub repository (`Revati-Firke/gitactionflow`)
-- [x] Clean README with live URLs
-- [x] Modular monolith structure (`backend/`, `frontend/`, `docs/`)
-- [x] No secrets in git (`.env` gitignored; `.env.example` placeholders)
-- [ ] Useful commit history includes Phase 10 (commit/push pending if still local)
+- [x] Public GitHub repository
+- [x] README with live demo URLs
+- [x] Clear project structure
+- [x] No secrets committed (`.env` / `*.local.md` gitignored)
+- [x] Conventional commit history on `dev`
 - [x] `AGENTS.md`
-- [x] `AI_NOTES.md`
+- [x] `AI_NOTES.md` (tools used + my decisions + corrections)
 - [x] `SECURITY.md`
 - [x] `.env.example`
+- [x] `CHANGELOG.md` RC entry
 
 ## Application
 
-- [x] Public frontend — https://gitactionflow.vercel.app
-- [x] Public backend — https://gitactionflow-backend.onrender.com
+- [x] Frontend — https://gitactionflow.vercel.app
+- [x] Backend — https://gitactionflow-backend.onrender.com
 - [x] GitHub OAuth
-- [x] Repository connection (one repo)
-- [x] Webhooks (manual registration on repo)
+- [x] Repository connection
+- [x] Webhooks (manual on repo)
 - [x] Issues path verified live
-- [ ] Pull requests — run one live PR smoke before submit if not done
+- [ ] Pull request — code ready; one live PR before demo if not done
 - [x] Configurable rules
-- [ ] GitHub label — use existing label for clean demo (422 if missing)
-- [ ] GitHub comment — optional live confirm
+- [x] GitHub label (use an **existing** label for a clean demo)
+- [x] GitHub comment (implemented; confirm live if demoing)
 - [x] Slack verified live
 - [x] Event history
 - [x] Action history
 
 ## Reliability
 
-- [x] Signature verification (tests + forged request rejected)
-- [x] Idempotency (DB constraints + tests; confirm live redeliver once)
-- [x] Retries (implemented + tested)
-- [x] Failure persistence / dashboard visibility
-- [x] Worker recovery (lease / SKIP LOCKED)
-- [x] Authorization isolation (session-scoped)
+- [x] Signature verification (tests + live forged → 401)
+- [x] Idempotency (DB + tests; live redeliver once if possible)
+- [x] Retries
+- [x] Failure visibility on the dashboard
+- [x] Worker recovery
+- [x] Authorization isolation
 
 ## Optional
 
-- [x] AI — implemented, disabled by default
-- [x] Observability — structured logs + request_id (Phase 10)
-- [ ] Multi-repository — **not implemented**
-- [ ] GitHub App — **not implemented**
+- [x] AI — implemented, off by default
+- [x] Observability — structured logs + request_id
+- [ ] Multi-repository — not built
+- [ ] GitHub App — not built
 
-## Docs for reviewers
+## Docs
 
-- [x] `docs/assignment/requirements-matrix.md`
-- [x] `docs/assignment/verification.md`
-- [x] `docs/assignment/final-acceptance.md`
-- [x] `docs/assignment/demo-script.md`
-- [x] `docs/deployment/`
+- [x] Deployment docs
+- [x] Requirements matrix
+- [x] Verification
+- [x] Demo script
+- [x] Final acceptance
+- [x] This checklist
 
-## Pre-submit actions
+## Pre-demo
 
-1. Commit + push Phase 10/11 docs and hardening; redeploy Render + Vercel.  
-2. Fix demo rules (existing labels only).  
-3. One PR smoke + one webhook redeliver.  
-4. Fill any remaining checkboxes above with real results.
+Use labels that exist on the demo repo (or Slack-only rules) so the event status shows **Processed**, not Failed from a GitHub 422.

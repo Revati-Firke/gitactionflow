@@ -1,8 +1,15 @@
 # Deployment — Neon + Render + Vercel
 
-**Status:** Deployment **preparation** is in the repository. Live URLs and production verification require your Neon / Render / Vercel / GitHub accounts (not claimable from this codebase alone).
+**Status:** Live on free tiers (no credit card).
 
-Assignment constraint: **free tiers only, no credit card**.
+```text
+Frontend:       https://gitactionflow.vercel.app
+Backend:        https://gitactionflow-backend.onrender.com
+OAuth callback: https://gitactionflow.vercel.app/auth/github/callback  (proxied to Render)
+GitHub webhook: https://gitactionflow-backend.onrender.com/webhooks/github
+```
+
+Browser calls go same-origin through Vercel (`/api`, `/auth`). GitHub webhooks hit Render directly.
 
 ---
 
@@ -12,12 +19,10 @@ Assignment constraint: **free tiers only, no credit card**.
 User
  │
  ▼
-Vercel
-React Frontend (HTTPS)
- │  cookie credentials + CORS
+Vercel (SPA + /api /auth proxy)
+ │
  ▼
-Render
-Go Backend (HTTPS, $PORT)
+Render — Go backend
  │
  ├── GitHub OAuth
  ├── GitHub Webhooks
@@ -25,17 +30,16 @@ Go Backend (HTTPS, $PORT)
  └── Slack Incoming Webhook
  │
  ▼
-Neon
-PostgreSQL (SSL)
+Neon — PostgreSQL (SSL)
 ```
 
-### Placeholder URLs
+Generic placeholders when recreating elsewhere:
 
 ```text
-Frontend:       https://<your-vercel-domain>
-Backend:        https://<your-render-domain>
-OAuth callback: https://<your-render-domain>/auth/github/callback
-GitHub webhook: https://<your-render-domain>/webhooks/github
+Frontend:       https://<vercel-domain>
+Backend:        https://<render-domain>
+OAuth callback: https://<vercel-domain>/auth/github/callback
+GitHub webhook: https://<render-domain>/webhooks/github
 ```
 
 ---

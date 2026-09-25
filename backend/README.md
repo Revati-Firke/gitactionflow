@@ -1,8 +1,6 @@
 # Backend
 
-Go HTTP API for GitActionFlow.
-
-**Phase 9 status:** OAuth, one-repo connection, webhooks, event worker, rules, GitHub/Slack actions, and dashboard history APIs.
+Go HTTP API for GitActionFlow: OAuth, one-repo connection, webhooks, event worker, rules, GitHub/Slack actions, and dashboard history APIs.
 
 ## Requirements
 
