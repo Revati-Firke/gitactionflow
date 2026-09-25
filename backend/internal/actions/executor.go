@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Revati-Firke/gitactionflow/backend/internal/ai"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/auth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/events"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/githubapi"
@@ -18,7 +19,6 @@ import (
 	"github.com/Revati-Firke/gitactionflow/backend/internal/slack"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/store"
 )
-
 
 // GitHubWriter performs GitHub write operations.
 type GitHubWriter interface {
@@ -59,6 +59,7 @@ type Executor struct {
 	TokenKey    []byte
 	GitHub      GitHubWriter
 	Slack       SlackSender
+	AI          ai.Suggester // optional; nil or Noop skips AI
 	MaxAttempts int
 	Log         *slog.Logger
 }
@@ -114,6 +115,13 @@ func (e *Executor) EnsureAndExecute(ctx context.Context, ev store.WebhookEvent, 
 		ruleNames[intent.RuleID] = intent.RuleName
 	}
 
+	var suggestion *ai.Suggestion
+	if needsAI(list) {
+		if s, ok := e.fetchSuggestion(ctx, evCtx); ok {
+			suggestion = &s
+		}
+	}
+
 	for _, a := range list {
 		if a.Status == store.ActionStatusCompleted {
 			continue
@@ -142,7 +150,7 @@ func (e *Executor) EnsureAndExecute(ctx context.Context, ev store.WebhookEvent, 
 		if a.RuleID != nil {
 			ruleName = ruleNames[*a.RuleID]
 		}
-		execErr := e.executeOne(ctx, repo, ev, evCtx, a, ruleName)
+		execErr := e.executeOne(ctx, repo, ev, evCtx, a, ruleName, suggestion)
 		if execErr == nil {
 			if _, err := e.Actions.MarkCompleted(ctx, a.ID); err != nil {
 				return err
@@ -197,17 +205,50 @@ func (e *Executor) EnsureAndExecute(ctx context.Context, ev store.WebhookEvent, 
 	return nil
 }
 
-func (e *Executor) executeOne(ctx context.Context, repo store.Repository, ev store.WebhookEvent, evCtx rules.EventContext, a store.Action, ruleName string) error {
+func (e *Executor) executeOne(ctx context.Context, repo store.Repository, ev store.WebhookEvent, evCtx rules.EventContext, a store.Action, ruleName string, suggestion *ai.Suggestion) error {
 	switch a.ActionType {
 	case rules.ActionGitHubLabel:
-		return e.execGitHubLabel(ctx, repo, evCtx, a)
+		return e.execGitHubLabel(ctx, repo, evCtx, a, suggestion)
 	case rules.ActionGitHubComment:
-		return e.execGitHubComment(ctx, repo, evCtx, a)
+		return e.execGitHubComment(ctx, repo, evCtx, a, suggestion)
 	case rules.ActionSlackNotification:
-		return e.execSlack(ctx, repo, ev, a, ruleName)
+		return e.execSlack(ctx, repo, ev, a, ruleName, suggestion)
 	default:
 		return fmt.Errorf("%w: unknown action_type", events.ErrInvalidEvent)
 	}
+}
+
+func needsAI(list []store.Action) bool {
+	for _, a := range list {
+		var m map[string]any
+		if json.Unmarshal(a.ActionConfig, &m) != nil {
+			continue
+		}
+		if v, ok := m["use_ai"].(bool); ok && v {
+			return true
+		}
+		if v, ok := m["append_ai_summary"].(bool); ok && v {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Executor) fetchSuggestion(ctx context.Context, evCtx rules.EventContext) (ai.Suggestion, bool) {
+	log := e.Log
+	if log == nil {
+		log = slog.Default()
+	}
+	if e.AI == nil {
+		return ai.Suggestion{}, false
+	}
+	s, err := e.AI.Suggest(ctx, evCtx.Title, evCtx.Body)
+	if err != nil {
+		log.Info("ai suggestion skipped", "err", err.Error(), "event_type", evCtx.EventType)
+		return ai.Suggestion{}, false
+	}
+	log.Info("ai suggestion ready", "priority", s.Priority, "labels", len(s.SuggestedLabels))
+	return s, true
 }
 
 func (e *Executor) accessToken(ctx context.Context, userID uuid.UUID) (string, error) {
@@ -222,43 +263,69 @@ func (e *Executor) accessToken(ctx context.Context, userID uuid.UUID) (string, e
 	return string(plain), nil
 }
 
-func (e *Executor) execGitHubLabel(ctx context.Context, repo store.Repository, evCtx rules.EventContext, a store.Action) error {
+func (e *Executor) execGitHubLabel(ctx context.Context, repo store.Repository, evCtx rules.EventContext, a store.Action, suggestion *ai.Suggestion) error {
 	if evCtx.IssueNumber <= 0 {
 		return fmt.Errorf("%w: missing issue number", githubapi.ErrPermanent)
 	}
 	var cfg struct {
 		Label string `json:"label"`
+		UseAI bool   `json:"use_ai"`
 	}
-	if err := json.Unmarshal(a.ActionConfig, &cfg); err != nil || strings.TrimSpace(cfg.Label) == "" {
+	if err := json.Unmarshal(a.ActionConfig, &cfg); err != nil {
+		return fmt.Errorf("%w: invalid label config", githubapi.ErrPermanent)
+	}
+	label := strings.TrimSpace(cfg.Label)
+	if cfg.UseAI && suggestion != nil && len(suggestion.SuggestedLabels) > 0 {
+		label = suggestion.SuggestedLabels[0]
+	}
+	if label == "" {
 		return fmt.Errorf("%w: invalid label config", githubapi.ErrPermanent)
 	}
 	token, err := e.accessToken(ctx, repo.UserID)
 	if err != nil {
 		return err
 	}
-	return e.GitHub.AddIssueLabels(ctx, token, repo.OwnerLogin, repo.Name, evCtx.IssueNumber, []string{strings.TrimSpace(cfg.Label)})
+	return e.GitHub.AddIssueLabels(ctx, token, repo.OwnerLogin, repo.Name, evCtx.IssueNumber, []string{label})
 }
 
-func (e *Executor) execGitHubComment(ctx context.Context, repo store.Repository, evCtx rules.EventContext, a store.Action) error {
+func (e *Executor) execGitHubComment(ctx context.Context, repo store.Repository, evCtx rules.EventContext, a store.Action, suggestion *ai.Suggestion) error {
 	if evCtx.IssueNumber <= 0 {
 		return fmt.Errorf("%w: missing issue number", githubapi.ErrPermanent)
 	}
 	var cfg struct {
-		Comment string `json:"comment"`
+		Comment         string `json:"comment"`
+		UseAI           bool   `json:"use_ai"`
+		AppendAISummary bool   `json:"append_ai_summary"`
 	}
-	if err := json.Unmarshal(a.ActionConfig, &cfg); err != nil || strings.TrimSpace(cfg.Comment) == "" {
+	if err := json.Unmarshal(a.ActionConfig, &cfg); err != nil {
+		return fmt.Errorf("%w: invalid comment config", githubapi.ErrPermanent)
+	}
+	comment := strings.TrimSpace(cfg.Comment)
+	if (cfg.UseAI || cfg.AppendAISummary) && suggestion != nil && suggestion.Summary != "" {
+		if cfg.UseAI && comment == "" {
+			comment = suggestion.Summary
+		} else if cfg.AppendAISummary {
+			if comment == "" {
+				comment = suggestion.Summary
+			} else {
+				comment = comment + "\n\n---\nAI summary: " + suggestion.Summary
+			}
+		}
+	}
+	if comment == "" {
 		return fmt.Errorf("%w: invalid comment config", githubapi.ErrPermanent)
 	}
 	token, err := e.accessToken(ctx, repo.UserID)
 	if err != nil {
 		return err
 	}
-	return e.GitHub.CreateIssueComment(ctx, token, repo.OwnerLogin, repo.Name, evCtx.IssueNumber, strings.TrimSpace(cfg.Comment))
+	return e.GitHub.CreateIssueComment(ctx, token, repo.OwnerLogin, repo.Name, evCtx.IssueNumber, comment)
 }
 
-func (e *Executor) execSlack(ctx context.Context, repo store.Repository, ev store.WebhookEvent, a store.Action, ruleName string) error {
+func (e *Executor) execSlack(ctx context.Context, repo store.Repository, ev store.WebhookEvent, a store.Action, ruleName string, suggestion *ai.Suggestion) error {
 	var cfg struct {
-		Message string `json:"message"`
+		Message         string `json:"message"`
+		AppendAISummary bool   `json:"append_ai_summary"`
 	}
 	if err := json.Unmarshal(a.ActionConfig, &cfg); err != nil || strings.TrimSpace(cfg.Message) == "" {
 		return fmt.Errorf("%w: invalid slack config", slack.ErrPermanent)
@@ -266,9 +333,13 @@ func (e *Executor) execSlack(ctx context.Context, repo store.Repository, ev stor
 	if ruleName == "" {
 		ruleName = "(unnamed)"
 	}
+	msg := strings.TrimSpace(cfg.Message)
+	if cfg.AppendAISummary && suggestion != nil && suggestion.Summary != "" {
+		msg = msg + "\nAI: " + suggestion.Summary + " (priority: " + suggestion.Priority + ")"
+	}
 	text := fmt.Sprintf(
 		"GitActionFlow automation triggered\n\nRepository: %s\nEvent: %s\nAction: %s\nRule: %s\n\n%s",
-		repo.FullName, ev.EventType, ev.Action, ruleName, strings.TrimSpace(cfg.Message),
+		repo.FullName, ev.EventType, ev.Action, ruleName, msg,
 	)
 	return e.Slack.SendText(ctx, text)
 }

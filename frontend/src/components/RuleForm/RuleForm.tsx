@@ -9,12 +9,20 @@ type RuleFormProps = {
   onCancel: () => void
 }
 
-function configFromRule(rule?: Rule | null): { label: string; comment: string; message: string } {
+function configFromRule(rule?: Rule | null): {
+  label: string
+  comment: string
+  message: string
+  use_ai: boolean
+  append_ai_summary: boolean
+} {
   const cfg = rule?.action_config ?? {}
   return {
     label: typeof cfg.label === 'string' ? cfg.label : '',
     comment: typeof cfg.comment === 'string' ? cfg.comment : '',
     message: typeof cfg.message === 'string' ? cfg.message : '',
+    use_ai: cfg.use_ai === true,
+    append_ai_summary: cfg.append_ai_summary === true,
   }
 }
 
@@ -53,23 +61,30 @@ export function RuleForm({ initial, busy, error, onSubmit, onCancel }: RuleFormP
     }
     let action_config: Record<string, unknown> = {}
     if (actionType === 'github_label') {
-      if (!cfg.label.trim()) {
-        setLocalError('Label name is required.')
+      if (!cfg.label.trim() && !cfg.use_ai) {
+        setLocalError('Label name is required (or enable AI label suggestion).')
         return
       }
-      action_config = { label: cfg.label.trim() }
+      action_config = { label: cfg.label.trim(), ...(cfg.use_ai ? { use_ai: true } : {}) }
     } else if (actionType === 'github_comment') {
-      if (!cfg.comment.trim()) {
-        setLocalError('Comment is required.')
+      if (!cfg.comment.trim() && !cfg.use_ai && !cfg.append_ai_summary) {
+        setLocalError('Comment is required (or enable AI summary options).')
         return
       }
-      action_config = { comment: cfg.comment.trim() }
+      action_config = {
+        comment: cfg.comment.trim(),
+        ...(cfg.use_ai ? { use_ai: true } : {}),
+        ...(cfg.append_ai_summary ? { append_ai_summary: true } : {}),
+      }
     } else if (actionType === 'slack_notification') {
       if (!cfg.message.trim()) {
         setLocalError('Message is required.')
         return
       }
-      action_config = { message: cfg.message.trim() }
+      action_config = {
+        message: cfg.message.trim(),
+        ...(cfg.append_ai_summary ? { append_ai_summary: true } : {}),
+      }
     }
 
     const required_labels = labels
@@ -163,6 +178,26 @@ export function RuleForm({ initial, busy, error, onSubmit, onCancel }: RuleFormP
           <span className="field-hint">Slack destination is configured on the server, not in this form.</span>
         </label>
       )}
+
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={cfg.use_ai}
+          onChange={(e) => setCfg({ ...cfg, use_ai: e.target.checked })}
+        />
+        Optional AI assist (label/comment from model when AI_ENABLED on server)
+      </label>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={cfg.append_ai_summary}
+          onChange={(e) => setCfg({ ...cfg, append_ai_summary: e.target.checked })}
+        />
+        Append AI summary (comment/Slack) when available
+      </label>
+      <p className="field-hint">
+        AI is optional. If the provider is down or disabled, rules still run with your static label/comment/message.
+      </p>
 
       <label className="check">
         <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />

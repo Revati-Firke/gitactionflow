@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Revati-Firke/gitactionflow/backend/internal/actions"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/ai"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/auth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/config"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/database"
@@ -54,6 +55,8 @@ func Run() error {
 		"event_max_retries", cfg.EventMaxRetries,
 		"action_max_retries", cfg.ActionMaxRetries,
 		"slack_configured", cfg.SlackWebhookURL != "",
+		"ai_enabled", cfg.AIEnabled,
+		"ai_provider", cfg.AIProvider,
 	)
 
 	ctx := context.Background()
@@ -164,7 +167,16 @@ func Run() error {
 		Addr:              cfg.Addr(),
 		Handler:           engine,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
+
+	aiClient := ai.New(ai.Config{
+		Enabled:  cfg.AIEnabled,
+		Provider: cfg.AIProvider,
+		APIKey:   cfg.AIAPIKey,
+	})
 
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
@@ -177,6 +189,7 @@ func Run() error {
 			TokenKey:    tokenKey,
 			GitHub:      ghAPI,
 			Slack:       slackClient,
+			AI:          aiClient,
 			MaxAttempts: cfg.ActionMaxRetries,
 			Log:         log,
 		}

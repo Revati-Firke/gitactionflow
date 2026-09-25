@@ -29,6 +29,8 @@ type Config struct {
 	CookieSameSite         string
 	WebhookMaxBodyBytes    int64
 	AIAPIKey               string
+	AIEnabled              bool
+	AIProvider             string
 
 	EventWorkerEnabled      bool
 	EventWorkerPollInterval time.Duration
@@ -57,6 +59,14 @@ func Load() (Config, error) {
 	if cfg.FrontendURL == "" {
 		cfg.FrontendURL = "http://localhost:5173"
 	}
+	cfg.FrontendURL = strings.TrimRight(strings.TrimSpace(cfg.FrontendURL), "/")
+
+	aiEnabled, err := parseBool(getEnv("AI_ENABLED", "false"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AI_ENABLED: %w", err)
+	}
+	cfg.AIEnabled = aiEnabled
+	cfg.AIProvider = strings.ToLower(getEnv("AI_PROVIDER", "gemini"))
 
 	// Render (and many PaaS) inject PORT. Prefer it over APP_PORT when set.
 	portRaw := firstNonEmpty(os.Getenv("PORT"), os.Getenv("APP_PORT"), "8080")

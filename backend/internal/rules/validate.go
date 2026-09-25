@@ -95,28 +95,46 @@ func normalizeActionConfig(actionType string, raw json.RawMessage) (json.RawMess
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, fmt.Errorf("%w: action_config must be a JSON object", ErrInvalidInput)
 	}
+	useAI, _ := m["use_ai"].(bool)
+	appendAI, _ := m["append_ai_summary"].(bool)
+
 	switch actionType {
 	case ActionGitHubLabel:
 		label, _ := m["label"].(string)
 		label = strings.TrimSpace(label)
-		if label == "" {
-			return nil, fmt.Errorf("%w: action_config.label is required", ErrInvalidInput)
+		if label == "" && !useAI {
+			return nil, fmt.Errorf("%w: action_config.label is required (or set use_ai)", ErrInvalidInput)
 		}
-		return json.Marshal(map[string]string{"label": label})
+		out := map[string]any{"label": label}
+		if useAI {
+			out["use_ai"] = true
+		}
+		return json.Marshal(out)
 	case ActionGitHubComment:
 		comment, _ := m["comment"].(string)
 		comment = strings.TrimSpace(comment)
-		if comment == "" {
-			return nil, fmt.Errorf("%w: action_config.comment is required", ErrInvalidInput)
+		if comment == "" && !useAI && !appendAI {
+			return nil, fmt.Errorf("%w: action_config.comment is required (or set use_ai / append_ai_summary)", ErrInvalidInput)
 		}
-		return json.Marshal(map[string]string{"comment": comment})
+		out := map[string]any{"comment": comment}
+		if useAI {
+			out["use_ai"] = true
+		}
+		if appendAI {
+			out["append_ai_summary"] = true
+		}
+		return json.Marshal(out)
 	case ActionSlackNotification:
 		msg, _ := m["message"].(string)
 		msg = strings.TrimSpace(msg)
 		if msg == "" {
 			return nil, fmt.Errorf("%w: action_config.message is required", ErrInvalidInput)
 		}
-		return json.Marshal(map[string]string{"message": msg})
+		out := map[string]any{"message": msg}
+		if appendAI {
+			out["append_ai_summary"] = true
+		}
+		return json.Marshal(out)
 	default:
 		return nil, fmt.Errorf("%w: invalid action_type", ErrInvalidInput)
 	}
