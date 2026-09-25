@@ -2,6 +2,7 @@ package router
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -31,23 +32,31 @@ func New(deps Dependencies) *gin.Engine {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(middleware.RequestID())
+	r.Use(middleware.SecurityHeaders())
 	r.Use(gin.Logger())
 	r.Use(middleware.CORS(deps.FrontendURL))
+
+	authLimit := middleware.NewRateLimiter(2*time.Second, 20)
+	apiLimit := middleware.NewRateLimiter(time.Second, 60)
 
 	r.GET("/health", handlers.Health)
 	r.GET("/ready", handlers.Ready(deps.DB))
 
 	if deps.Webhooks != nil {
 		// Public endpoint — authenticated by X-Hub-Signature-256, not session cookies.
+		// Intentionally not rate-limited: GitHub retries must not be dropped by abuse controls.
 		r.POST("/webhooks/github", deps.Webhooks.HandlePOST)
 	}
 
 	if deps.Auth != nil {
-		r.GET("/auth/github", deps.Auth.StartGitHub)
-		r.GET("/auth/github/callback", deps.Auth.CallbackGitHub)
-		r.POST("/auth/logout", deps.Auth.Logout)
+		r.GET("/auth/github", authLimit.Limit(), deps.Auth.StartGitHub)
+		r.GET("/auth/github/callback", authLimit.Limit(), deps.Auth.CallbackGitHub)
+		r.POST("/auth/logout", middleware.CSRFOrigin(deps.FrontendURL), apiLimit.Limit(), deps.Auth.Logout)
 
 		api := r.Group("/api")
+		api.Use(middleware.CSRFOrigin(deps.FrontendURL))
+		api.Use(apiLimit.Limit())
 		api.Use(middleware.RequireAuth(deps.AuthMW))
 		api.GET("/me", handlers.Me)
 
