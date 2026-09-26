@@ -11,18 +11,17 @@
 credentials.json
 service-account*.json
 
-# OS
+# OS / editors
 .DS_Store
 Thumbs.db
-
-# Editors / IDEs
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 *~
 
-# Go
+# Build / deps
 backend/bin/
 backend/dist/
 *.exe
@@ -30,8 +29,6 @@ backend/dist/
 *.out
 coverage.out
 vendor/
-
-# Node / frontend
 frontend/node_modules/
 frontend/dist/
 frontend/build/
@@ -41,21 +38,42 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
-# Logs
 *.log
 logs/
-
-# Docker
 docker-data/
-
-# Test / temp
 tmp/
 temp/
 .cache/
 coverage/
 .nyc_output/
-
-# Misc
 *.bak
 *.tmp
+*.mp4
+*.webm
+*.mov
+screenshots/
+recordings/
+
+# Local-only (not for evaluators)
+DEPLOYMENT_URLS.local.md
+*.local.md
+!docs/**/*.md
+
+# Candidate scratch — add back after review if useful
+CONTRIBUTING.md
+CHANGELOG.md
+docs/assignment/submission-data.md
+docs/assignment/submission-checklist.md
+docs/assignment/final-acceptance.md
+docs/assignment/verification.md
+docs/assignment/demo-script.md
+docs/assignment/demo-video-guide.md
+docs/assignment/requirements-matrix.md
+docs/deployment/production-checklist.md
+docs/deployment/smoke-test.md
+docs/api/
+docs/database/
+backend/README.md
+frontend/README.md
+.github/workflows/
+docs/architecture/HLA.png

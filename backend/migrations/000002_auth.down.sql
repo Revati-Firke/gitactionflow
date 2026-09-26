@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS oauth_states;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;

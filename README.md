@@ -1,227 +1,146 @@
 # GitActionFlow
 
-**Event-driven automation for Git repositories.**
+Abstrabit SDE1 take-home — **event-driven GitHub automation bot**.
 
-GitActionFlow is a take-home engineering assessment for an Abstrabit Software Engineer I (SDE1) role. It demonstrates building a small but real product: a web app and bot that react to GitHub repository activity, apply configurable rules, write back to GitHub, notify Slack, and show results on an authenticated dashboard.
+Sign in with GitHub → connect **one** repo → receive signed webhooks → match simple rules → label/comment on GitHub and notify Slack → see it all on a login-gated dashboard.
 
----
-
-## Current status (Phase 1)
-
-This repository is in **Phase 1: Project Foundation & Documentation**.
-
-**What exists now**
-
-- Project structure (`backend/`, `frontend/`, `docs/`)
-- Architecture and design documentation
-- Security and reliability principles (documented, not yet implemented)
-- Developer / AI context (`AGENTS.md`)
-- Environment variable template (`.env.example`)
-- Local PostgreSQL scaffolding via `docker-compose.yml`
-
-**What is not implemented yet**
-
-- GitHub OAuth, sessions, or login UI
-- Webhook handling, event processing, or rule engine
-- GitHub API write-back or Slack notifications
-- Database schema / migrations
-- React dashboard pages
-- Public deployment
-- Optional AI triage
-
-Do not assume features listed under “Core functionality (planned)” work until later phases land them.
+Built and deployed on **free tiers only** (no credit card): Neon + Render + Vercel.
 
 ---
 
-## Assignment purpose
-
-Deliver a polished, reliable, production-style implementation of an **Event-Driven GitHub Automation Bot**:
-
-1. User signs in with GitHub and connects one repository they own.
-2. The app receives signed webhooks (issues and pull requests at minimum).
-3. The bot evaluates rules, acts on GitHub (label and/or comment), and notifies Slack.
-4. A dashboard (behind login) shows event and action history and lets the user configure simple rules.
-5. The system must be secure (signature verification, OAuth state, no secret leakage) and reliable (idempotent deliveries, durable persistence, visible failures).
-
-Everything must use **free tiers only** (no credit card).
-
----
-
-## Core functionality (planned)
-
-| Capability | Phase |
-| --- | --- |
-| Publicly reachable web app | Later (deploy) |
-| GitHub OAuth sign-in | Phase 2+ |
-| Connect one owned repository | Phase 2+ |
-| Webhook endpoint (issues + pull requests) | Phase 2+ |
-| GitHub write-back (label / comment) | Phase 2+ |
-| Slack notifications | Phase 2+ |
-| Authenticated dashboard (repo, rules, events, actions) | Phase 2+ |
-| Configurable rules | Phase 2+ |
-| Webhook signature + delivery idempotency | Phase 2+ |
-| Durable processing without silent event loss | Phase 2+ |
-| Optional AI summary / label / priority (free provider) | Optional stretch |
-
----
-
-## High-level architecture
-
-Modular monolith. One Go backend serves auth, repository management, webhooks, processing, and dashboard APIs. React is the UI. PostgreSQL is the durable source of truth.
+## Live URLs
 
 ```text
-                         USER
-                           │
-                           ▼
-                  React Web Dashboard
-                           │
-                           ▼
-                      Go Backend
-                           │
-                ┌──────────┼───────────┐
-                ▼          ▼           ▼
-              Auth     Repository    Dashboard
-                │       Management     APIs
-                │
-                ▼
-           GitHub OAuth
-
-GitHub Repository
-       │
-       │ signed webhook
-       ▼
- Webhook Handler
-       │
-       ├── verify signature
-       ├── validate event
-       ├── check delivery ID
-       └── persist event
-               │
-               ▼
-        Event Processor
-               │
-               ▼
-          Rule Engine
-               │
-          ┌────┴─────┐
-          ▼          ▼
-       Optional      Actions
-          AI          │
-                      ├── GitHub API
-                      └── Slack
-               │
-               ▼
-        Action Results → PostgreSQL → React Dashboard
+App:     https://gitactionflow.vercel.app
+API:     https://gitactionflow-backend.onrender.com
+Health:  https://gitactionflow-backend.onrender.com/health
+Source:  https://github.com/Revati-Firke/gitactionflow   (branch: dev)
 ```
 
-See [docs/architecture/HLA.md](docs/architecture/HLA.md) for the full description.
+**Try it:** open the app → Login with GitHub (your account) → connect a repo you admin → add a rule → open an issue.  
+Webhook on *your* repo is manual (URL below). Or watch the demo video in the submission for the full live path on my wired demo repo.
+
+```text
+Webhook URL:  https://gitactionflow-backend.onrender.com/webhooks/github
+Events:       Issues + Pull requests
+Secret:       ask me privately if you need to test on your own repo
+```
 
 ---
 
-## Technology stack
+## Assignment coverage
 
-| Layer | Choice |
+| Brief requirement | Status |
 | --- | --- |
-| Backend | Go + Gin (or equivalent lightweight HTTP framework) |
-| Database | PostgreSQL via pgx |
-| Frontend | React + TypeScript + Vite |
-| Auth | GitHub OAuth |
-| Integrations | GitHub Webhooks, GitHub REST API, Slack Incoming Webhook |
-| Containers | Docker / Docker Compose (local Postgres) |
-| Optional AI | Gemini or Groq (stretch only; never required for core path) |
+| Public deployed app | Live (links above) |
+| GitHub sign-in + connect one owned repo | Done (OAuth App, admin required) |
+| Webhooks for ≥2 event types, recorded | `issues` + `pull_request` |
+| Bot writes back to GitHub (label or comment) | Both implemented |
+| Slack notification | Incoming Webhook |
+| Dashboard behind login (events + actions + rules) | React dashboard |
+| README + `.env.example` + deploy notes | This file + docs below |
+| Quality: forged webhooks, idempotency, no silent loss, no leaked secrets | HMAC + delivery/action keys + persist-before-ack + redacted logs |
+| Stretch: configurable rules | UI + AND conditions |
+| Stretch: optional free AI | `AI_ENABLED` default **off** — core path works without it |
+| Stretch: GitHub App / multi-repo | **Skipped on purpose** (OAuth App + one repo) |
+
+How I used AI tools while building: **[AI_NOTES.md](AI_NOTES.md)**.  
+Working constraints I set for myself: **[AGENTS.md](AGENTS.md)**.
 
 ---
 
-## Planned local development
+## What I chose (and why)
 
-> Exact commands will be finalized when backend and frontend scaffolds land. Outline below.
-
-1. Clone the repository.
-2. Copy `.env.example` → `.env` and fill values (never commit real secrets).
-3. Start PostgreSQL: `docker compose up -d`.
-4. Run the Go API from `backend/` (Phase 2+).
-5. Run the Vite React app from `frontend/` (Phase 2+).
-6. For webhook testing against a local machine, use a tunnel (e.g. Cloudflare Tunnel / similar free option) so GitHub can reach a public URL.
-
-Required environment variables are listed in [`.env.example`](.env.example).
-
----
-
-## Planned deployment
-
-Free-tier oriented (verify current limits before choosing a provider):
-
-| Piece | Likely host |
+| Decision | Why |
 | --- | --- |
-| React frontend | Vercel, Netlify, or Render static |
-| Go backend | Render (or similar free web service) |
-| PostgreSQL | Neon or Supabase |
+| One Go process + React + Postgres | Small product; easy to deploy/debug on free hosts |
+| Postgres as the queue (`FOR UPDATE SKIP LOCKED`) | Durable without Redis/Kafka; survives Render sleep |
+| GitHub **OAuth App**, one repo per user | Matches the brief; GitHub App / multi-repo were extra scope |
+| Rules emit intents; separate executor | Retries don’t blindly double-fire Slack/GitHub |
+| Persist event/action **before** external HTTP | Don’t silently lose work if Slack/GitHub blips |
+| Vercel proxy for `/api` + `/auth` | Incognito blocked third-party cookies to Render |
 
-OAuth callbacks and webhooks **must** use the public HTTPS URL — not localhost.
+More detail: [docs/decisions/](docs/decisions/) · [docs/architecture/HLA.md](docs/architecture/HLA.md)
 
-Details: [docs/deployment/README.md](docs/deployment/README.md).
-
-**Status:** Not deployed in Phase 1.
-
----
-
-## Testing (planned)
-
-Phase 1 has no runtime code to test.
-
-Later phases will cover:
-
-- Unit tests for signature verification, idempotency, and rule matching
-- Handler tests with forged / replayed webhook fixtures
-- Integration tests against local PostgreSQL
-- Manual end-to-end checklist on the live URL (OAuth → connect repo → open issue/PR → dashboard + Slack)
+```text
+webhook → verify HMAC → dedupe delivery ID → persist
+  → worker → rules → GitHub / Slack → dashboard
+```
 
 ---
 
-## Security considerations
+## Stack
 
-Documented now; implemented in later phases:
+Go (Gin, pgx) · React + Vite · PostgreSQL · GitHub OAuth/Webhooks/REST · Slack Incoming Webhook · optional Gemini/Groq
 
-- Verify `X-Hub-Signature-256` with HMAC-SHA256 and constant-time compare
-- Treat GitHub delivery IDs as idempotency keys
-- Validate OAuth `state` (CSRF protection)
-- Keep all secrets server-side; never ship them to the frontend or commit them
-- Do not log tokens, webhook secrets, Slack URLs, or database credentials
+---
+
+## How to test (reviewers)
+
+1. Open https://gitactionflow.vercel.app (wake API via `/health` if cold).
+2. Login with GitHub → dashboard.
+3. Confirm a connected repo (or connect one you admin).
+4. Create/enable a rule: keyword `bug` → Slack and/or GitHub comment (use an **existing** label name if you choose label).
+5. Open an issue titled e.g. `demo bug` on the connected repo (webhook must point at the URL above).
+6. Refresh **Events** and **Actions** on the dashboard.
+7. Check GitHub for comment/label; Slack only if you share my workspace or set your own `SLACK_WEBHOOK_URL` on a fork/deploy.
+
+Forged webhook (expect non-2xx):
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" -X POST \
+  https://gitactionflow-backend.onrender.com/webhooks/github \
+  -H 'Content-Type: application/json' \
+  -H 'X-GitHub-Event: issues' \
+  -H 'X-GitHub-Delivery: review-forge-1' \
+  -H 'X-Hub-Signature-256: sha256=deadbeef' \
+  -d '{"action":"opened"}'
+```
+
+---
+
+## Local run
+
+Details: [docs/setup/LOCAL.md](docs/setup/LOCAL.md). Summary:
+
+```bash
+cp .env.example .env   # fill OAuth + SESSION_SECRET + webhook secret
+docker-compose up -d postgres
+cd backend && go run ./cmd/server
+cd frontend && npm install && npm run dev
+```
+
+Open `http://localhost:5173` (use **localhost**, not `127.0.0.1`).
+
+Required env (see `.env.example`): `DATABASE_URL`, `FRONTEND_URL`, `GITHUB_CLIENT_*`, `GITHUB_OAUTH_REDIRECT_URL`, `SESSION_SECRET`, `GITHUB_WEBHOOK_SECRET`. Optional: `SLACK_WEBHOOK_URL`, `AI_ENABLED`.
+
+```bash
+cd backend && go test ./...
+cd frontend && npm run build
+```
+
+---
+
+## Deploy (how I shipped it)
+
+Full steps: [docs/deployment/README.md](docs/deployment/README.md).
+
+1. Neon → `DATABASE_URL`
+2. Render Docker from `backend/` (`AUTO_MIGRATE=true`)
+3. Vercel from `frontend/` — leave `VITE_API_BASE_URL` **unset** (same-origin proxy in `vercel.json`)
+4. OAuth App homepage + callback on the **Vercel** host
+5. Repo webhook → Render `/webhooks/github`
+
+---
+
+## Security (quality bar)
+
+- Webhook HMAC on raw body; unique `X-GitHub-Delivery`
+- Action idempotency key before GitHub/Slack HTTP
+- HttpOnly sessions; GitHub tokens encrypted at rest; never in the browser
+- No secrets in git, frontend, or logs (`.env.example` placeholders only)
 
 See [SECURITY.md](SECURITY.md).
-
----
-
-## Documentation map
-
-| Doc | Purpose |
-| --- | --- |
-| [AGENTS.md](AGENTS.md) | AI / developer working rules |
-| [AI_NOTES.md](AI_NOTES.md) | Honest AI collaboration notes (fill during development) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute; commit conventions |
-| [SECURITY.md](SECURITY.md) | Security principles |
-| [CHANGELOG.md](CHANGELOG.md) | Release history |
-| [docs/architecture/HLA.md](docs/architecture/HLA.md) | High-level architecture |
-| [docs/api/README.md](docs/api/README.md) | Planned API surface |
-| [docs/database/README.md](docs/database/README.md) | Database direction |
-| [docs/deployment/README.md](docs/deployment/README.md) | Deployment direction |
-| [docs/decisions/README.md](docs/decisions/README.md) | ADR index |
-
----
-
-## Future implementation phases (outline)
-
-| Phase | Focus |
-| --- | --- |
-| **1 (current)** | Foundation, docs, conventions |
-| **2** | Backend scaffold, Postgres access, health, config |
-| **3** | Auth (GitHub OAuth + sessions) |
-| **4** | Repository connect + webhook registration |
-| **5** | Webhook ingest, persistence, idempotency |
-| **6** | Rule engine + GitHub / Slack actions |
-| **7** | React dashboard |
-| **8** | Deploy + E2E hardening |
-| **Optional** | Free-tier AI assist behind a clear abstraction |
 
 ---
 

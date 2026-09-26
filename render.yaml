@@ -1,0 +1,44 @@
+# Optional Render Blueprint (no secrets). Prefer the Render dashboard for first deploy.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Create the service manually if you prefer — this file is a reference only.
+
+services:
+  - type: web
+    name: gitactionflow-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: AUTO_MIGRATE
+        value: "true"
+      - key: LOG_LEVEL
+        value: info
+      - key: EVENT_WORKER_ENABLED
+        value: "true"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: None
+      # Set these in the Render dashboard (do not commit real values):
+      # DATABASE_URL, FRONTEND_URL, GITHUB_*, SESSION_SECRET, SLACK_WEBHOOK_URL
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_OAUTH_REDIRECT_URL
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false

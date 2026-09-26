@@ -1,75 +1,38 @@
-# Deployment Direction
+# Deployment (Neon + Render + Vercel)
 
-**Status:** Planned — **nothing is deployed** in Phase 1.
-
-GitHub OAuth callbacks and webhooks require a **public HTTPS URL**. Localhost alone is insufficient for the live assignment demo.
-
----
-
-## Intended topology
+How this app is hosted — free tiers, no credit card.
 
 ```text
-React frontend
-      ↓
-Public deployment
-      ↓
-Go backend
-      ↓
-PostgreSQL
+App:      https://gitactionflow.vercel.app
+API:      https://gitactionflow-backend.onrender.com
+Callback: https://gitactionflow.vercel.app/auth/github/callback   (Vercel → Render proxy)
+Webhook:  https://gitactionflow-backend.onrender.com/webhooks/github
 ```
 
-| Piece | Role |
-| --- | --- |
-| React (Vite build) | Static assets + SPA |
-| Go backend | API, OAuth, webhooks, processing |
-| PostgreSQL | Durable state |
+Browser uses same-origin `/api` and `/auth` on Vercel. GitHub webhooks hit Render directly.
 
 ---
 
-## Expected free-tier services
+## Steps I used
 
-Assignment constraint: **no credit card**. Prefer providers with genuine free tiers. Always re-check current free-tier terms before locking in a choice — limits and eligibility change.
+1. **Neon** — create Postgres; set `DATABASE_URL` (SSL).
+2. **Render** — Docker from `backend/` (`APP_ENV=production`, `AUTO_MIGRATE=true`, health `/health`).
+3. Confirm `/health` and `/ready`.
+4. **Vercel** — root `frontend/`; leave **`VITE_API_BASE_URL` unset** so `vercel.json` proxies `/api` + `/auth`, then SPA fallback.
+5. Set Render `FRONTEND_URL` and `GITHUB_OAUTH_REDIRECT_URL` to the Vercel origin/callback.
+6. GitHub OAuth App: homepage = Vercel; callback = Vercel `/auth/github/callback`.
+7. On the demo repo: webhook → Render URL, JSON, Issues + PRs, same secret as `GITHUB_WEBHOOK_SECRET`.
+8. Optional: `SLACK_WEBHOOK_URL` on Render only.
 
-| Concern | Candidate options (verify before use) |
-| --- | --- |
-| Frontend | Vercel, Netlify, or Render static hosting |
-| Backend | Render (or similar free web service suitable for a long-running Go process) |
-| PostgreSQL | Neon or Supabase free Postgres |
-| Secrets | Host-provided environment variables |
-| Slack | Free Slack workspace + Incoming Webhook |
-| GitHub | Free OAuth App / webhooks / API |
+### Why the Vercel proxy
 
-If a service asks for a credit card for the tier you need, switch providers or tiers.
+Cross-site cookies to Render failed in Incognito. Proxying `/api` and `/auth` makes the session cookie first-party on the app host.
 
----
+### Render env (required)
 
-## Configuration on the host
+`DATABASE_URL`, `FRONTEND_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_OAUTH_REDIRECT_URL`, `GITHUB_WEBHOOK_SECRET`, `SESSION_SECRET`, `AUTO_MIGRATE=true`.  
+Optional: `SLACK_WEBHOOK_URL`, `AI_ENABLED=false`.
 
-Environment variables will mirror `.env.example` (public URL, OAuth client id/secret, webhook secret, database URL, Slack webhook URL, etc.).
+Never put secrets in Vercel.
 
-Critical public URLs to configure consistently:
-
-- Frontend origin
-- Backend public base URL
-- GitHub OAuth callback URL
-- GitHub webhook payload URL
-
----
-
-## Local vs production
-
-| Environment | Notes |
-| --- | --- |
-| Local | `docker compose` for Postgres; app processes on localhost; tunnel required to receive real GitHub webhooks |
-| Production | Public HTTPS frontend + backend; managed Postgres; secrets only in host env |
-
----
-
-## What Phase 1 does not do
-
-- Create cloud accounts
-- Provision databases remotely
-- Deploy frontend or backend
-- Claim a live URL
-
-Deployment steps and the live URL will be added to the root `README.md` when Phase 8 (or equivalent) completes.
+Local still uses Docker Compose + `.env` — see [LOCAL.md](../setup/LOCAL.md).

@@ -1,196 +1,48 @@
-# AGENTS.md — GitActionFlow
+# AGENTS.md
 
-Context file for human developers and AI coding assistants working on this repository.
+Notes for anyone (or any tool) changing this repo. I wrote these to keep the Abstrabit take-home **small, secure, and demoable**.
 
----
+## Product
 
-## Project purpose
+GitHub OAuth → one connected repo → signed webhooks → rules → GitHub label/comment + Slack → dashboard history.
 
-**GitActionFlow** — event-driven automation for Git repositories.
+Optimize for a working free-tier demo. Skip platform features.
 
-Build a small, reliable product that:
+## My locked decisions
 
-- Authenticates users with GitHub OAuth
-- Lets a user connect **one** repository they own
-- Receives signed GitHub webhooks (issues and pull requests at minimum)
-- Applies configurable rules
-- Writes back to GitHub (label and/or comment)
-- Sends Slack notifications
-- Shows event and action history on an authenticated dashboard
-
-This is an Abstrabit SDE1 take-home assignment. Prefer a **simple, secure, working** solution over speculative features.
-
----
-
-## Scope boundaries
-
-### In scope
-
-- GitHub OAuth, webhooks, REST API
-- Single repository per user (assignment core)
-- Configurable rules (keywords, etc.)
-- Slack Incoming Webhook notifications
-- PostgreSQL durability, idempotency, failure visibility
-- Free-tier deployment
-- Optional AI (Gemini/Groq) behind an abstraction — never required for core path
-
-### Out of scope (do not add)
-
-- GitLab / Bitbucket support
-- Multi-repository product features beyond assignment needs
-- Kafka, Kubernetes, Redis, microservices
-- Custom visual workflow builders
-- Paid APIs or services that require a credit card
-- Features not required by the assignment
-
-If tempted to expand scope, document a decision or note it under “future work” — do not implement it silently.
-
----
-
-## Architecture
-
-**Modular monolith.** One Go process. React UI. PostgreSQL as source of truth.
-
-Canonical flow:
-
-```text
-GitHub webhook → verify → validate → dedupe by delivery ID → persist event
-  → process → rule engine → actions (GitHub API, Slack) → persist results
-  → dashboard reads from PostgreSQL
-```
-
-Architecture source of truth: `docs/architecture/HLA.md`.
-
-Do not redesign the architecture without an ADR and explicit human agreement.
-
----
-
-## Technology stack
-
-| Area | Stack |
+| Choice | Why |
 | --- | --- |
-| Backend | Go, Gin (or lightweight equivalent), pgx, PostgreSQL |
-| Frontend | React, TypeScript, Vite |
-| Integrations | GitHub OAuth / Webhooks / REST, Slack Incoming Webhook |
-| Local data | Docker Compose PostgreSQL |
-| Optional AI | Gemini or Groq (stretch only) |
+| Modular monolith (Go + React + Postgres) | One deploy unit on Render |
+| Neon + Render + Vercel | Free, no card |
+| OAuth App + one repo | Matches the brief; skip GitHub App / multi-repo |
+| Postgres queue (`SKIP LOCKED`) | No Redis/Kafka |
+| Rule intents ≠ executor | Safe retries; testable matching |
+| Persist before external HTTP | No silent loss |
+| Manual repo webhook | Ingest correctness over auto-register |
+| Vercel `/api` `/auth` proxy | First-party cookies after Incognito broke cross-site |
+| `AI_ENABLED` default off | Stretch only |
 
----
+Details: `docs/decisions/` · `AI_NOTES.md`
 
-## Before modifying code
-
-1. Inspect the existing implementation and understand the architecture.
-2. Prefer small, focused changes over rewrites.
-3. Do not overwrite useful files without reading them first.
-4. Do not introduce unnecessary dependencies.
-5. Do not start a later phase automatically when finishing an earlier one.
-6. If a design decision is necessary, document it (ADR or docs) rather than silently changing architecture.
-
----
-
-## Coding principles
-
-- Prefer readable Go over clever Go.
-- Keep functions focused.
-- Keep interfaces small.
-- Avoid premature abstraction.
-- Avoid unnecessary dependencies.
-- Validate external input.
-- Handle errors explicitly.
-- Never ignore errors without a clear reason.
-- Do not log secrets.
-- Write tests for important behavior.
-- Keep configuration environment-based.
-- Use `context.Context` appropriately.
-- Keep business logic separate from HTTP handlers.
-- Keep external integrations isolated behind clear boundaries.
-- Update documentation when architecture or behavior changes.
-
-### Frontend
-
-- TypeScript strictness; clear separation of API client vs UI.
-- Do not put secrets in client code or Vite env vars that are exposed to the browser.
-
----
-
-## Security rules
-
-- Verify GitHub webhooks with `X-Hub-Signature-256` (HMAC-SHA256, constant-time compare).
-- Persist GitHub delivery IDs; duplicate deliveries must not re-execute side effects.
-- Validate OAuth `state` against CSRF.
-- Never expose to the frontend or commit:
-  - GitHub OAuth client secret
-  - GitHub access tokens
-  - Webhook secrets
-  - Slack webhook URLs
-  - AI API keys
-  - Database credentials
-- Never log the above.
-- Provide `.env.example` with placeholders only — no real secrets.
-
----
-
-## Reliability rules
+## Flow (don’t redesign quietly)
 
 ```text
-Webhook → validate → dedupe → persist event → process → execute actions → persist action result
+webhook → HMAC → dedupe → persist → worker → rules → GitHub/Slack → dashboard
 ```
 
-- Acknowledge receipt after **durable persistence**, not after every downstream side effect completes synchronously.
-- Database is the durable source of truth — not an in-memory queue for critical event state.
-- Failures must be visible and eventually retryable.
-- Do not silently drop events when Slack or GitHub is briefly unavailable.
+## Hard rules
 
----
+- HttpOnly sessions; encrypted tokens; never trust client `user_id`
+- Re-fetch repo by id; require `admin`
+- HMAC on **raw** body; unique delivery ID; no side effects inside the webhook request
+- Rule conditions AND; Slack URL only from env
+- Retry 429/5xx; fail permanently on 401/403/404/422
+- `VITE_API_BASE_URL` unset in production
 
-## Documentation rules
+## Out of scope
 
-- Distinguish **implemented** vs **planned**.
-- Do not claim features work when they do not.
-- Keep HLA, API, database, and deployment docs aligned with reality.
-- Update docs in the same change when behavior or architecture shifts.
+Multi-repo product, Redis/Kafka/K8s, paid APIs, workflow builders.
 
----
+## Habits
 
-## Testing expectations
-
-- Unit-test signature verification, idempotency, and rule matching.
-- Cover forged and replayed webhook cases with fixtures.
-- Prefer focused tests over brittle end-to-end-only coverage.
-- Manual E2E checklist required before submission (live URL).
-
----
-
-## Git commit conventions
-
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-```text
-feat:     new user-facing capability
-fix:      bug fix
-docs:     documentation only
-test:     tests only
-refactor: internal change without behavior change
-chore:    tooling, deps, scaffolding
-security: security-related change
-```
-
-Examples:
-
-```text
-docs: add initial project architecture
-feat: verify GitHub webhook signatures
-fix: skip duplicate webhook deliveries by delivery ID
-```
-
-Avoid meaningless messages (`update`, `changes`, `final`, `test`, `stuff`).
-
----
-
-## Important constraints
-
-- Free tiers only; no credit card.
-- One connected repository is enough for the assignment core.
-- AI is optional and must not block the core path.
-- Phase discipline: complete the current phase; stop; do not auto-start the next.
-- Keep the submission simple, reliable, secure, and well documented.
+Small diffs. Fail fast on config. Never log secrets. Tests for signature, idempotency, rules. Conventional Commits. Docs must match what runs.
