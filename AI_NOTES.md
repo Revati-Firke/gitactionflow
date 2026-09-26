@@ -17,9 +17,9 @@ How I used AI on GitActionFlow for the Abstrabit take-home.
 | Deploy provider choice + cookie/proxy diagnosis after Incognito broke | ChatGPT: research on hosts/cookies/OAuth; Cursor: first-pass `vercel.json` / env wiring |
 | Reviewing every security-sensitive change (HMAC, sessions, secrets) | Speeding up repetitive edits; doc drafts I then rewrote |
 
-I treated AI as a fast junior pair: useful for volume, not trusted for production judgment without me reading the diff.
+I treated AI as a fast junior pair: good for volume, not trusted for judgment until I read the diff.
 
-## 2–3 decisions I made myself
+## Decisions I made myself
 
 1. **Modular monolith + PostgreSQL as the queue**  
    One Go process on Render, React on Vercel, Neon for durable state. I rejected Redis/Kafka/microservices—they don’t fit free-tier ops or the brief. Worker claims rows with `FOR UPDATE SKIP LOCKED` so cold starts don’t lose events.

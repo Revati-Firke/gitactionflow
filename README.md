@@ -1,165 +1,146 @@
 # GitActionFlow
 
-Event-driven automation for GitHub repositories.
+Abstrabit SDE1 take-home — **event-driven GitHub automation bot**.
 
-Take-home for Abstrabit Software Engineer I: sign in with GitHub, connect one repo, react to signed webhooks, run simple rules, write back to GitHub and Slack, and show history on a dashboard—secure and durable enough for a real demo, without building a platform.
+Sign in with GitHub → connect **one** repo → receive signed webhooks → match simple rules → label/comment on GitHub and notify Slack → see it all on a login-gated dashboard.
+
+Built and deployed on **free tiers only** (no credit card): Neon + Render + Vercel.
 
 ---
 
-## Live demo
+## Live URLs
 
 ```text
-Frontend:  https://gitactionflow.vercel.app
-Backend:   https://gitactionflow-backend.onrender.com
-Health:    https://gitactionflow-backend.onrender.com/health
+App:     https://gitactionflow.vercel.app
+API:     https://gitactionflow-backend.onrender.com
+Health:  https://gitactionflow-backend.onrender.com/health
+Source:  https://github.com/Revati-Firke/gitactionflow   (branch: dev)
 ```
 
-Typical walkthrough: open the frontend → Login with GitHub → connect a repo you admin → create a rule → open an Issue → refresh the dashboard. Short script: [docs/assignment/demo-script.md](docs/assignment/demo-script.md).
-
-Requirements ↔ evidence: [docs/assignment/requirements-matrix.md](docs/assignment/requirements-matrix.md) · [verification.md](docs/assignment/verification.md) · [final-acceptance.md](docs/assignment/final-acceptance.md)
-
----
-
-## What ships
-
-- GitHub OAuth, HttpOnly sessions, encrypted access tokens
-- Connect / disconnect **one** repository (admin required)
-- Signed webhooks (issues + pull requests), delivery-ID idempotency, background worker with retries
-- Rules (AND conditions) → GitHub label / comment + Slack Incoming Webhook
-- Dashboard: repo, rules, events, actions (including failures)
-- Optional AI summaries / suggested labels (`AI_ENABLED`, off by default)
-
-**Left out on purpose**
-
-- Multi-repo product mode
-- GitHub App installation auth (OAuth App is enough here)
-- Automatic webhook create/delete on connect (configure the webhook once on the repo)
-
-Why those cuts: see [AI_NOTES.md](AI_NOTES.md) and [docs/decisions/](docs/decisions/).
-
----
-
-## Design choices (short)
-
-| Choice | Rationale |
-| --- | --- |
-| Modular monolith (Go + React + Postgres) | One process to reason about; Postgres as queue and source of truth |
-| Free stack: Neon + Render + Vercel | Assignment constraint; no paid APIs |
-| Vercel proxy for `/api` and `/auth` | Session cookies stay first-party; Incognito-friendly |
-| Persist before side effects | Ack only after durable event row; actions row before GitHub/Slack HTTP |
-| Rule intents ≠ executor | Rules decide *what*; `internal/actions` does *how* (testable, idempotent) |
-
-Architecture diagram and flow: [docs/architecture/HLA.md](docs/architecture/HLA.md).
+**Try it:** open the app → Login with GitHub (your account) → connect a repo you admin → add a rule → open an issue.  
+Webhook on *your* repo is manual (URL below). Or watch the demo video in the submission for the full live path on my wired demo repo.
 
 ```text
-GitHub webhook → verify → dedupe → persist event
-  → worker → rules → actions (GitHub / Slack) → persist results
-  → dashboard reads Postgres
+Webhook URL:  https://gitactionflow-backend.onrender.com/webhooks/github
+Events:       Issues + Pull requests
+Secret:       ask me privately if you need to test on your own repo
+```
+
+---
+
+## Assignment coverage
+
+| Brief requirement | Status |
+| --- | --- |
+| Public deployed app | Live (links above) |
+| GitHub sign-in + connect one owned repo | Done (OAuth App, admin required) |
+| Webhooks for ≥2 event types, recorded | `issues` + `pull_request` |
+| Bot writes back to GitHub (label or comment) | Both implemented |
+| Slack notification | Incoming Webhook |
+| Dashboard behind login (events + actions + rules) | React dashboard |
+| README + `.env.example` + deploy notes | This file + docs below |
+| Quality: forged webhooks, idempotency, no silent loss, no leaked secrets | HMAC + delivery/action keys + persist-before-ack + redacted logs |
+| Stretch: configurable rules | UI + AND conditions |
+| Stretch: optional free AI | `AI_ENABLED` default **off** — core path works without it |
+| Stretch: GitHub App / multi-repo | **Skipped on purpose** (OAuth App + one repo) |
+
+How I used AI tools while building: **[AI_NOTES.md](AI_NOTES.md)**.  
+Working constraints I set for myself: **[AGENTS.md](AGENTS.md)**.
+
+---
+
+## What I chose (and why)
+
+| Decision | Why |
+| --- | --- |
+| One Go process + React + Postgres | Small product; easy to deploy/debug on free hosts |
+| Postgres as the queue (`FOR UPDATE SKIP LOCKED`) | Durable without Redis/Kafka; survives Render sleep |
+| GitHub **OAuth App**, one repo per user | Matches the brief; GitHub App / multi-repo were extra scope |
+| Rules emit intents; separate executor | Retries don’t blindly double-fire Slack/GitHub |
+| Persist event/action **before** external HTTP | Don’t silently lose work if Slack/GitHub blips |
+| Vercel proxy for `/api` + `/auth` | Incognito blocked third-party cookies to Render |
+
+More detail: [docs/decisions/](docs/decisions/) · [docs/architecture/HLA.md](docs/architecture/HLA.md)
+
+```text
+webhook → verify HMAC → dedupe delivery ID → persist
+  → worker → rules → GitHub / Slack → dashboard
 ```
 
 ---
 
 ## Stack
 
-| Layer | Choice |
-| --- | --- |
-| Backend | Go, Gin, pgx, golang-migrate |
-| Frontend | React, TypeScript, Vite |
-| Auth | GitHub OAuth App + server sessions |
-| Data | PostgreSQL |
-| Notify | Slack Incoming Webhook |
-| Optional AI | Gemini or Groq behind a small interface |
+Go (Gin, pgx) · React + Vite · PostgreSQL · GitHub OAuth/Webhooks/REST · Slack Incoming Webhook · optional Gemini/Groq
 
 ---
 
-## Production deploy (summary)
+## How to test (reviewers)
 
-Full guide: [docs/deployment/README.md](docs/deployment/README.md) · checklist: [production-checklist.md](docs/deployment/production-checklist.md)
+1. Open https://gitactionflow.vercel.app (wake API via `/health` if cold).
+2. Login with GitHub → dashboard.
+3. Confirm a connected repo (or connect one you admin).
+4. Create/enable a rule: keyword `bug` → Slack and/or GitHub comment (use an **existing** label name if you choose label).
+5. Open an issue titled e.g. `demo bug` on the connected repo (webhook must point at the URL above).
+6. Refresh **Events** and **Actions** on the dashboard.
+7. Check GitHub for comment/label; Slack only if you share my workspace or set your own `SLACK_WEBHOOK_URL` on a fork/deploy.
 
-1. Neon Postgres → `DATABASE_URL`
-2. Render Docker from `backend/` (`APP_ENV=production`, `AUTO_MIGRATE=true`)
-3. Confirm `/health` and `/ready`
-4. Vercel from `frontend/` — leave **`VITE_API_BASE_URL` unset** (same-origin proxy)
-5. Render: `FRONTEND_URL` and `GITHUB_OAUTH_REDIRECT_URL` point at the Vercel origin / callback
-6. GitHub OAuth App homepage + callback on the Vercel host
-7. Repo webhook → `https://gitactionflow-backend.onrender.com/webhooks/github` (Issues + PRs)
-8. Smoke: [docs/deployment/smoke-test.md](docs/deployment/smoke-test.md)
-
-Cookie note: prefer first-party cookies via the Vercel proxy. Do not point the browser at Render’s API origin in production builds.
-
----
-
-## Local development
-
-Walkthrough: [docs/setup/LOCAL.md](docs/setup/LOCAL.md)
-
-**Need:** Go 1.25+, Docker Compose, GitHub OAuth App.
+Forged webhook (expect non-2xx):
 
 ```bash
-# Postgres
+curl -sS -o /dev/null -w "%{http_code}\n" -X POST \
+  https://gitactionflow-backend.onrender.com/webhooks/github \
+  -H 'Content-Type: application/json' \
+  -H 'X-GitHub-Event: issues' \
+  -H 'X-GitHub-Delivery: review-forge-1' \
+  -H 'X-Hub-Signature-256: sha256=deadbeef' \
+  -d '{"action":"opened"}'
+```
+
+---
+
+## Local run
+
+Details: [docs/setup/LOCAL.md](docs/setup/LOCAL.md). Summary:
+
+```bash
+cp .env.example .env   # fill OAuth + SESSION_SECRET + webhook secret
 docker-compose up -d postgres
-
-# Backend (load .env from repo root — see .env.example)
 cd backend && go run ./cmd/server
-
-# Frontend
 cd frontend && npm install && npm run dev
 ```
 
-Open `http://localhost:5173`. Use **`localhost`**, not `127.0.0.1`, so cookies match OAuth.
+Open `http://localhost:5173` (use **localhost**, not `127.0.0.1`).
 
-| Variable | Role |
-| --- | --- |
-| `DATABASE_URL` | Postgres |
-| `FRONTEND_URL` | CORS + post-login redirect |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth App |
-| `GITHUB_OAUTH_REDIRECT_URL` | Must match the OAuth App callback |
-| `SESSION_SECRET` | ≥32 chars (`openssl rand -hex 32`) |
-| `GITHUB_WEBHOOK_SECRET` | Webhook HMAC |
-| `SLACK_WEBHOOK_URL` | Optional Slack |
-
-Health: `curl http://127.0.0.1:8080/health` and `/ready`.
-
-Webhook locally: set the secret, tunnel `:8080` or use the signed curl in LOCAL.md, point the repo webhook at `/webhooks/github`.
-
-Connect requires GitHub **admin** on the repo. Disconnect before switching repos. Webhook registration is still **manual**.
-
----
-
-## Tests
+Required env (see `.env.example`): `DATABASE_URL`, `FRONTEND_URL`, `GITHUB_CLIENT_*`, `GITHUB_OAUTH_REDIRECT_URL`, `SESSION_SECRET`, `GITHUB_WEBHOOK_SECRET`. Optional: `SLACK_WEBHOOK_URL`, `AI_ENABLED`.
 
 ```bash
-cd backend && go test ./... && go vet ./...
+cd backend && go test ./...
 cd frontend && npm run build
 ```
 
-Unit coverage focuses on signature verification, idempotency, rule matching, and auth-sensitive paths. Manual E2E is on the live URLs above.
+---
+
+## Deploy (how I shipped it)
+
+Full steps: [docs/deployment/README.md](docs/deployment/README.md).
+
+1. Neon → `DATABASE_URL`
+2. Render Docker from `backend/` (`AUTO_MIGRATE=true`)
+3. Vercel from `frontend/` — leave `VITE_API_BASE_URL` **unset** (same-origin proxy in `vercel.json`)
+4. OAuth App homepage + callback on the **Vercel** host
+5. Repo webhook → Render `/webhooks/github`
 
 ---
 
-## Security
+## Security (quality bar)
 
-- HMAC-SHA256 webhook signatures (`hmac.Equal`), bounded body size
-- Delivery ID uniqueness; action idempotency key before external calls
-- OAuth `state` + Origin checks on mutating cookie APIs
-- No secrets in the frontend bundle, logs, or git (see `.env.example`)
+- Webhook HMAC on raw body; unique `X-GitHub-Delivery`
+- Action idempotency key before GitHub/Slack HTTP
+- HttpOnly sessions; GitHub tokens encrypted at rest; never in the browser
+- No secrets in git, frontend, or logs (`.env.example` placeholders only)
 
-Details: [SECURITY.md](SECURITY.md). How AI was used: [AI_NOTES.md](AI_NOTES.md). Working rules for contributors/agents: [AGENTS.md](AGENTS.md).
-
----
-
-## Docs map
-
-| Doc | Purpose |
-| --- | --- |
-| [docs/setup/LOCAL.md](docs/setup/LOCAL.md) | Local OAuth + webhook setup |
-| [docs/architecture/HLA.md](docs/architecture/HLA.md) | Architecture |
-| [docs/api/README.md](docs/api/README.md) | HTTP API |
-| [docs/database/README.md](docs/database/README.md) | Schema direction |
-| [docs/deployment/README.md](docs/deployment/README.md) | Deploy |
-| [docs/decisions/](docs/decisions/) | ADRs |
-| [docs/assignment/](docs/assignment/) | Matrix, verification, demo, acceptance |
-| [CHANGELOG.md](CHANGELOG.md) | Release notes |
+See [SECURITY.md](SECURITY.md).
 
 ---
 

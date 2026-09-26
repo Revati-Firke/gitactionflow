@@ -1,79 +1,29 @@
-# High-Level Architecture (HLA)
+# High-level architecture
 
-**Status:** Current — core product path including authenticated dashboard.
-
-**Project:** GitActionFlow — event-driven automation for Git repositories.
-
-Architecture source of truth. Do not redesign without an ADR and explicit agreement.
-
----
-
-## System overview
+One Go API + React UI + PostgreSQL.
 
 ```text
-                React Dashboard
+React dashboard ──► Go backend ──► Postgres
                        │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-   Repository        Rules         Activity
-        │              │              │
-        └──────────────┼──────────────┘
-                       ▼
-                   Go Backend
-                       │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-      Auth          Webhooks       Worker
-                       │              │
-                       ▼              ▼
-                  PostgreSQL ←── Actions / Events
-                       │
-          ┌────────────┴────────────┐
-          ▼                         ▼
-     GitHub API                   Slack
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+        OAuth      Webhooks      Worker
+                       │            │
+                       └──── rules + actions ──► GitHub API / Slack
 ```
-
-Canonical flow:
 
 ```text
-GitHub webhook → verify → dedupe → persist event
- → worker → rules → action intents → executor (GitHub / Slack)
- → action results → dashboard reads PostgreSQL via API
+GitHub → verify HMAC → dedupe delivery ID → persist event
+      → worker (SKIP LOCKED) → rules → executor → results → dashboard
 ```
 
----
-
-## Main components
-
-| Component | Responsibility |
+| Piece | Role |
 | --- | --- |
-| React dashboard | Login, repo, rules, event/action history |
-| Auth | GitHub OAuth + sessions |
-| Repository management | One connected repo |
-| Webhook handler | Signature, dedupe, persist |
-| Event worker | Claim, validate, rules, actions |
-| Rule engine | Match → intents |
-| Action executor | Persist + execute GitHub/Slack |
+| Auth | OAuth App + HttpOnly session |
+| Repository | One connected repo (admin) |
+| Webhook | Signature, idempotency, persist only |
+| Worker | Claim, retry, stale lease recovery |
+| Rules | AND match → action intents |
+| Executor | Persist action row, then GitHub/Slack |
 
----
-
-## Dashboard APIs
-
-Authenticated, scoped to the user’s connected repository:
-
-- `GET /api/events?page=&limit=` — summarized events (no raw payloads)
-- `GET /api/actions?page=&limit=` — action history with rule name when available
-
-Also: `/api/me`, repository routes, `/api/rules` CRUD.
-
----
-
-## Why this shape
-
-I kept a **modular monolith** so deploy and debugging stay simple on free tiers. Postgres is both store and queue—no Redis/Kafka for the assignment. Rules emit intents; a separate executor owns side effects and idempotency. Details: `docs/decisions/`.
-
----
-
-## Related documents
-
-- [API](../api/README.md) · [Database](../database/README.md) · [ADRs](../decisions/README.md) · [Local setup](../setup/LOCAL.md)
+Why this shape: free-tier ops, durable events, clear boundaries for tests. Decisions: `docs/decisions/`.
