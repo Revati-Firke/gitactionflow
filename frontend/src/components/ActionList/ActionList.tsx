@@ -22,17 +22,42 @@ type ActionListProps = {
   loading: boolean
   error: string | null
   repoConnected: boolean
+  eventTypeFilter: string
+  onEventTypeFilterChange: (eventType: string) => void
   onRefresh: () => void
 }
 
-export function ActionList({ actions, loading, error, repoConnected, onRefresh }: ActionListProps) {
+export function ActionList({
+  actions,
+  loading,
+  error,
+  repoConnected,
+  eventTypeFilter,
+  onEventTypeFilterChange,
+  onRefresh,
+}: ActionListProps) {
   return (
     <section className="card">
       <div className="card-head">
         <h2>Recent actions</h2>
-        <button type="button" className="btn ghost" onClick={onRefresh} disabled={!repoConnected || loading}>
-          Refresh
-        </button>
+        <div className="card-head-controls">
+          <label className="filter-control">
+            <span className="sr-only">Event type</span>
+            <select
+              value={eventTypeFilter}
+              onChange={(e) => onEventTypeFilterChange(e.target.value)}
+              disabled={!repoConnected || loading}
+              aria-label="Filter by event type"
+            >
+              <option value="">All event types</option>
+              <option value="issues">Issue</option>
+              <option value="pull_request">Pull request</option>
+            </select>
+          </label>
+          <button type="button" className="btn ghost" onClick={onRefresh} disabled={!repoConnected || loading}>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {!repoConnected ? (
@@ -50,8 +75,12 @@ export function ActionList({ actions, loading, error, repoConnected, onRefresh }
         </div>
       ) : actions.length === 0 ? (
         <EmptyState
-          title="No actions have been executed yet"
-          description="Matching rules create durable actions that call GitHub or Slack."
+          title={eventTypeFilter ? 'No actions for this event type' : 'No actions have been executed yet'}
+          description={
+            eventTypeFilter
+              ? 'Try another event type, or wait for matching rules to run.'
+              : 'Matching rules create durable actions that call GitHub or Slack.'
+          }
         />
       ) : (
         <ul className="action-list">

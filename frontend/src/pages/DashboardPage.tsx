@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActionList } from '../components/ActionList/ActionList'
 import { EventList } from '../components/EventList/EventList'
 import { RepositoryCard } from '../components/RepositoryCard/RepositoryCard'
@@ -54,6 +54,9 @@ export function DashboardPage(_props: DashboardPageProps) {
   const [actions, setActions] = useState<ActionSummary[]>([])
   const [actionsLoading, setActionsLoading] = useState(false)
   const [actionsError, setActionsError] = useState<string | null>(null)
+  const [actionEventTypeFilter, setActionEventTypeFilter] = useState('')
+  const actionEventTypeFilterRef = useRef(actionEventTypeFilter)
+  actionEventTypeFilterRef.current = actionEventTypeFilter
 
   const refreshRules = useCallback(async (hasRepo: boolean) => {
     if (!hasRepo) {
@@ -93,16 +96,17 @@ export function DashboardPage(_props: DashboardPageProps) {
     }
   }, [])
 
-  const refreshActions = useCallback(async (hasRepo: boolean) => {
+  const refreshActions = useCallback(async (hasRepo: boolean, eventType?: string) => {
     if (!hasRepo) {
       setActions([])
       setActionsError(null)
       return
     }
+    const filter = eventType ?? actionEventTypeFilterRef.current
     setActionsLoading(true)
     setActionsError(null)
     try {
-      setActions(await listActions(1, 20))
+      setActions(await listActions(1, 20, filter || undefined))
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 404) {
         setActions([])
@@ -132,6 +136,13 @@ export function DashboardPage(_props: DashboardPageProps) {
   useEffect(() => {
     void refreshAll()
   }, [refreshAll])
+
+  function onActionEventTypeFilterChange(eventType: string) {
+    setActionEventTypeFilter(eventType)
+    if (connected) {
+      void refreshActions(true, eventType)
+    }
+  }
 
   async function onStartPick() {
     setRepoBusy(true)
@@ -292,6 +303,8 @@ export function DashboardPage(_props: DashboardPageProps) {
         loading={actionsLoading}
         error={actionsError}
         repoConnected={!!connected}
+        eventTypeFilter={actionEventTypeFilter}
+        onEventTypeFilterChange={onActionEventTypeFilterChange}
         onRefresh={() => void refreshActions(!!connected)}
       />
     </div>

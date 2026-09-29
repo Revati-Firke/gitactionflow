@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/Revati-Firke/gitactionflow/backend/internal/auth"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/http/response"
+	"github.com/Revati-Firke/gitactionflow/backend/internal/rules"
 	"github.com/Revati-Firke/gitactionflow/backend/internal/store"
 )
 
@@ -70,6 +72,21 @@ func parsePageLimit(c *gin.Context) (limit, offset int) {
 		}
 	}
 	return limit, offset
+}
+
+// parseEventTypeFilter returns an optional event_type query filter.
+// Empty means no filter; invalid values yield ok=false.
+func parseEventTypeFilter(c *gin.Context) (eventType string, ok bool) {
+	raw := strings.TrimSpace(c.Query("event_type"))
+	if raw == "" {
+		return "", true
+	}
+	switch raw {
+	case rules.EventTypeIssues, rules.EventTypePullRequest:
+		return raw, true
+	default:
+		return "", false
+	}
 }
 
 func (h *ActivityHandler) connectedRepo(c *gin.Context, userID uuid.UUID) (store.Repository, bool) {
@@ -144,7 +161,12 @@ func (h *ActivityHandler) ListActions(c *gin.Context) {
 		return
 	}
 	limit, offset := parsePageLimit(c)
-	list, err := h.Actions.ListRecentByRepository(c.Request.Context(), repo.ID, limit, offset)
+	eventType, ok := parseEventTypeFilter(c)
+	if !ok {
+		response.JSONError(c, http.StatusBadRequest, "INVALID_QUERY", "event_type must be issues or pull_request")
+		return
+	}
+	list, err := h.Actions.ListRecentByRepository(c.Request.Context(), repo.ID, limit, offset, eventType)
 	if err != nil {
 		if h.Log != nil {
 			h.Log.Error("list actions", "err", err)
