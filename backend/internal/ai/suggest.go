@@ -137,7 +137,7 @@ type geminiProvider struct {
 }
 
 func (g *geminiProvider) Suggest(ctx context.Context, title, body string) (Suggestion, error) {
-	endpoint := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + g.key
+	endpoint := "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + g.key
 	payload := map[string]any{
 		"contents": []map[string]any{
 			{"parts": []map[string]string{{"text": systemPrompt + "\n\nTitle: " + title + "\n\nBody:\n" + truncate(body, 4000)}}},

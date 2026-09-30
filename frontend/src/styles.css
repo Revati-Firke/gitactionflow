@@ -147,6 +147,23 @@ a {
   margin-bottom: 0.85rem;
 }
 
+.card-head-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.filter-control select {
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  padding: 0.45rem 0.65rem;
+}
+
 .card h2 {
   margin: 0;
   font-size: 1.05rem;
@@ -476,6 +493,7 @@ button:focus-visible {
   }
 
   .card-head,
+  .card-head-controls,
   .rule-item,
   .repo-pick li,
   .topbar-actions {

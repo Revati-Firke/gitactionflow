@@ -54,26 +54,7 @@ coverage/
 screenshots/
 recordings/
 
-# Local-only (not for evaluators)
+# Local-only ops scratch (never commit secrets/URLs with credentials)
 DEPLOYMENT_URLS.local.md
 *.local.md
 !docs/**/*.md
-
-# Candidate scratch — add back after review if useful
-CONTRIBUTING.md
-CHANGELOG.md
-docs/assignment/submission-data.md
-docs/assignment/submission-checklist.md
-docs/assignment/final-acceptance.md
-docs/assignment/verification.md
-docs/assignment/demo-script.md
-docs/assignment/demo-video-guide.md
-docs/assignment/requirements-matrix.md
-docs/deployment/production-checklist.md
-docs/deployment/smoke-test.md
-docs/api/
-docs/database/
-backend/README.md
-frontend/README.md
-.github/workflows/
-docs/architecture/HLA.png

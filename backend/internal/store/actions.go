@@ -258,7 +258,8 @@ type ActionWithRule struct {
 }
 
 // ListRecentByRepository returns newest actions for events belonging to a repository.
-func (s *Actions) ListRecentByRepository(ctx context.Context, repositoryID uuid.UUID, limit, offset int) ([]ActionWithRule, error) {
+// When eventType is non-empty, only actions whose webhook event has that event_type are returned.
+func (s *Actions) ListRecentByRepository(ctx context.Context, repositoryID uuid.UUID, limit, offset int, eventType string) ([]ActionWithRule, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -268,7 +269,7 @@ func (s *Actions) ListRecentByRepository(ctx context.Context, repositoryID uuid.
 	if offset < 0 {
 		offset = 0
 	}
-	const q = `
+	q := `
 SELECT
     a.id, a.event_id, a.rule_id, a.action_type, a.action_config, a.idempotency_key, a.status,
     a.attempt_count, a.max_attempts, a.next_retry_at, a.last_error, a.started_at, a.completed_at,
@@ -277,10 +278,20 @@ SELECT
 FROM actions a
 INNER JOIN webhook_events e ON e.id = a.event_id
 LEFT JOIN rules r ON r.id = a.rule_id
-WHERE e.repository_id = $1
+WHERE e.repository_id = $1`
+	args := []any{repositoryID}
+	if eventType != "" {
+		q += `
+AND e.event_type = $2`
+		args = append(args, eventType)
+	}
+	limitPlaceholder := len(args) + 1
+	offsetPlaceholder := len(args) + 2
+	q += fmt.Sprintf(`
 ORDER BY a.created_at DESC, a.id DESC
-LIMIT $2 OFFSET $3`
-	rows, err := s.pool.Query(ctx, q, repositoryID, limit, offset)
+LIMIT $%d OFFSET $%d`, limitPlaceholder, offsetPlaceholder)
+	args = append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list actions: %w", err)
 	}

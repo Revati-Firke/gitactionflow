@@ -5,7 +5,7 @@
 
 ## Context
 
-Webhook handlers persist deliveries as `pending` and return quickly. Events must be processed reliably without silent loss, without Redis, Kafka, or another broker (assignment / free-tier constraint).
+Webhook handlers persist deliveries as `pending` and return quickly. Events must be processed reliably without silent loss, without Redis, Kafka, or another broker (product scope / free-tier constraint).
 
 ## Decision
 
