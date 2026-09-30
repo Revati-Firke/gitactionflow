@@ -243,7 +243,7 @@ export function DashboardPage(_props: DashboardPageProps) {
 
   return (
     <div className="dashboard">
-      <p className="page-intro muted">Monitor automation for your connected repository.</p>
+      <p className="page-intro muted">Rules, webhook events, and actions for your connected repository.</p>
 
       <RepositoryCard
         connected={connected}

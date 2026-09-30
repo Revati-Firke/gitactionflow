@@ -2,9 +2,9 @@
 
 What the live app actually enforces. Not a formal audit.
 
-## Quality bar (assignment)
+## Quality bar
 
-| Requirement | How |
+| Goal | How |
 | --- | --- |
 | Not fooled by forged webhooks | `X-Hub-Signature-256` on raw body, `hmac.Equal` → 401 if bad |
 | Not double-acting on redelivery | Unique delivery ID; action key `event_id:rule_id:action_type` |

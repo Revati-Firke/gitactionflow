@@ -21,7 +21,7 @@ Browser uses same-origin `/api` and `/auth` on Vercel. GitHub webhooks hit Rende
 4. **Vercel** — root `frontend/`; leave **`VITE_API_BASE_URL` unset** so `vercel.json` proxies `/api` + `/auth`, then SPA fallback.
 5. Set Render `FRONTEND_URL` and `GITHUB_OAUTH_REDIRECT_URL` to the Vercel origin/callback.
 6. GitHub OAuth App: homepage = Vercel; callback = Vercel `/auth/github/callback`.
-7. On the demo repo: webhook → Render URL, JSON, Issues + PRs, same secret as `GITHUB_WEBHOOK_SECRET`.
+7. On the connected repo: webhook → Render URL, JSON, Issues + PRs, same secret as `GITHUB_WEBHOOK_SECRET`.
 8. Optional: `SLACK_WEBHOOK_URL` on Render only.
 
 ### Why the Vercel proxy

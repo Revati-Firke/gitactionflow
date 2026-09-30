@@ -70,7 +70,7 @@ func (c *Client) WithBaseURL(base string) *Client {
 func (c *Client) ListRepositories(ctx context.Context, accessToken string) ([]Repository, error) {
 	var all []Repository
 	page := 1
-	for page <= 5 { // hard cap to keep responses bounded for the assignment
+	for page <= 5 { // hard cap to keep list responses bounded
 		url := fmt.Sprintf("%s/user/repos?per_page=100&page=%d&affiliation=owner,collaborator&sort=updated", c.baseURL, page)
 		var batch []Repository
 		if err := c.getJSON(ctx, accessToken, url, &batch); err != nil {

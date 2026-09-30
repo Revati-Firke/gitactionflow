@@ -5,7 +5,7 @@
 
 ## Context
 
-GitActionFlow needs GitHub OAuth for dashboard access and a durable GitHub access token for repository API calls (labels, comments). Browser storage of tokens is unsafe. Plaintext token storage in PostgreSQL is below the quality bar for this assignment.
+GitActionFlow needs GitHub OAuth for dashboard access and a durable GitHub access token for repository API calls (labels, comments). Browser storage of tokens is unsafe. Plaintext token storage in PostgreSQL is below the security quality bar for this product.
 
 Frontend (Vite, `:5173`) and backend (`:8080`) are different origins during local development.
 

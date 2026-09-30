@@ -1,26 +1,26 @@
 # AGENTS.md
 
-Notes for anyone (or any tool) changing this repo. I wrote these to keep the Abstrabit take-home **small, secure, and demoable**.
+Notes for anyone (or any tool) changing this repo. Keep GitActionFlow **small, secure, and demoable**.
 
 ## Product
 
 GitHub OAuth → one connected repo → signed webhooks → rules → GitHub label/comment + Slack → dashboard history.
 
-Optimize for a working free-tier demo. Skip platform features.
+Optimize for a working free-tier product demo. Skip platform features.
 
-## My locked decisions
+## Locked decisions
 
 | Choice | Why |
 | --- | --- |
 | Modular monolith (Go + React + Postgres) | One deploy unit on Render |
-| Neon + Render + Vercel | Free, no card |
-| OAuth App + one repo | Matches the brief; skip GitHub App / multi-repo |
+| Neon + Render + Vercel | Free-tier, no paid infra required |
+| OAuth App + one repo | Clear scope; skip GitHub App / multi-repo |
 | Postgres queue (`SKIP LOCKED`) | No Redis/Kafka |
 | Rule intents ≠ executor | Safe retries; testable matching |
 | Persist before external HTTP | No silent loss |
 | Manual repo webhook | Ingest correctness over auto-register |
 | Vercel `/api` `/auth` proxy | First-party cookies after Incognito broke cross-site |
-| `AI_ENABLED` default off | Stretch only |
+| `AI_ENABLED` default off | Optional enrichment only |
 
 Details: `docs/decisions/` · `AI_NOTES.md`
 

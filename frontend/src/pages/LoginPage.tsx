@@ -10,7 +10,7 @@ export function LoginPage({ error }: LoginPageProps) {
       <p className="eyebrow">Event-driven Git automation</p>
       <h1 className="login-brand">GitActionFlow</h1>
       <p className="lede">
-        Sign in with GitHub to connect one repository, configure rules, and review webhook activity.
+        Connect a repository, define rules, and turn issues and pull requests into GitHub actions and Slack alerts.
       </p>
       {error && (
         <p className="error" role="alert">

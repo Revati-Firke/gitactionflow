@@ -15,8 +15,8 @@ const (
 	authorizeURL = "https://github.com/login/oauth/authorize"
 	tokenURL     = "https://github.com/login/oauth/access_token"
 	userURL      = "https://api.github.com/user"
-	// Scopes: identify the user + repo access needed later for webhooks/labels/comments.
-	// Kept minimal for the assignment workflow (no admin, no org, no gist).
+	// Scopes: identify the user + repo access needed for webhooks/labels/comments.
+	// Kept minimal for the product (no admin, no org, no gist).
 	DefaultScopes = "read:user repo"
 )
 
